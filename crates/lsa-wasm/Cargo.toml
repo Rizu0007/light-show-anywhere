@@ -1,0 +1,32 @@
+[package]
+name = "lsa-wasm"
+description = "Browser bindings for the Light Show Anywhere engine."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+lsa-fseq.workspace = true
+lsa-tesla.workspace = true
+wasm-bindgen.workspace = true
+
+[lints]
+workspace = true
+
+# Recent Rust emits these WebAssembly features by default; wasm-pack's bundled wasm-opt needs
+# them enabled explicitly. All are supported by every current browser.
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = [
+  "-O3",
+  "--enable-bulk-memory",
+  "--enable-nontrapping-float-to-int",
+  "--enable-sign-ext",
+  "--enable-mutable-globals",
+  "--enable-reference-types",
+  "--enable-multivalue",
+]

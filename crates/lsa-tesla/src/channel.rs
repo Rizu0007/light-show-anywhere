@@ -310,3 +310,92 @@ impl Channel {
         self.index().map(|i| i + 1)
     }
 }
+
+impl core::fmt::Display for Side {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(match self {
+            Self::Left => "Left",
+            Self::Right => "Right",
+        })
+    }
+}
+
+impl core::fmt::Display for Light {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let (side, name) = match self {
+            Self::OuterMainBeam(s) => (Some(s), "Outer Main Beam"),
+            Self::InnerMainBeam(s) => (Some(s), "Inner Main Beam"),
+            Self::Signature(s) => (Some(s), "Signature"),
+            Self::Channel4(s) => (Some(s), "Channel 4"),
+            Self::Channel5(s) => (Some(s), "Channel 5"),
+            Self::Channel6(s) => (Some(s), "Channel 6"),
+            Self::FrontTurn(s) => (Some(s), "Front Turn"),
+            Self::FrontFog(s) => (Some(s), "Front Fog"),
+            Self::AuxPark(s) => (Some(s), "Aux Park"),
+            Self::SideMarker(s) => (Some(s), "Side Marker"),
+            Self::SideRepeater(s) => (Some(s), "Side Repeater"),
+            Self::RearTurn(s) => (Some(s), "Rear Turn"),
+            Self::Brake => (None, "Brake Lights"),
+            Self::Tail(s) => (Some(s), "Tail"),
+            Self::Reverse => (None, "Reverse Lights"),
+            Self::RearFog => (None, "Rear Fog Lights"),
+            Self::LicensePlate => (None, "License Plate"),
+        };
+        match side {
+            Some(side) => write!(f, "{side} {name}"),
+            None => f.write_str(name),
+        }
+    }
+}
+
+impl core::fmt::Display for Closure {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        let position = |rear: bool| if rear { "Rear" } else { "Front" };
+        match self {
+            Self::FalconDoor(s) => write!(f, "{s} Falcon Door"),
+            Self::FrontDoor(s) => write!(f, "{s} Front Door"),
+            Self::Mirror(s) => write!(f, "{s} Mirror"),
+            Self::Window { side, rear } => write!(f, "{side} {} Window", position(*rear)),
+            Self::Liftgate => f.write_str("Liftgate"),
+            Self::DoorHandle { side, rear } => {
+                write!(f, "{side} {} Door Handle", position(*rear))
+            }
+            Self::ChargePort => f.write_str("Charge Port"),
+        }
+    }
+}
+
+impl core::fmt::Display for Channel {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        match self {
+            Self::Light(light) => light.fmt(f),
+            Self::Closure(closure) => closure.fmt(f),
+            Self::BarPixel { bar, index } => {
+                let bar = match bar {
+                    LightBar::Front => "Front Light Bar",
+                    LightBar::Rear => "Rear Light Bar",
+                    LightBar::Offroad => "Offroad Light Bar",
+                };
+                write!(f, "{bar} {}", u16::from(*index) + 1)
+            }
+            Self::Interior { zone, component } => {
+                let zone = match zone {
+                    RgbZone::Display => "Center Front Display",
+                    RgbZone::RightRear => "Right Rear RGB",
+                    RgbZone::RightFront => "Right Front RGB",
+                    RgbZone::CenterFront => "Center Front RGB",
+                    RgbZone::LeftFront => "Left Front RGB",
+                    RgbZone::LeftRear => "Left Rear RGB",
+                };
+                let component = match component {
+                    Rgb::Red => "R",
+                    Rgb::Green => "G",
+                    Rgb::Blue => "B",
+                };
+                write!(f, "{zone} ({component})")
+            }
+            Self::Suspension => f.write_str("Suspension (reserved)"),
+            Self::Unused => f.write_str("Unused"),
+        }
+    }
+}
