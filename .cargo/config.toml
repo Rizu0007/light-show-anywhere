@@ -1,0 +1,6 @@
+# Short commands used locally and in CI:
+#   cargo lint        -> strict lint of every crate
+#   cargo wasm-check  -> make sure the engine still compiles for the browser
+[alias]
+lint = "clippy --workspace --all-targets --all-features -- -D warnings"
+wasm-check = "check --workspace --target wasm32-unknown-unknown"

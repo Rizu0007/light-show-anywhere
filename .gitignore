@@ -1,0 +1,10 @@
+/target
+**/*.rs.bk
+.DS_Store
+
+# Local light shows and audio (often copyrighted, keep out of git)
+/shows/
+*.fseq
+*.mp3
+*.wav
+!crates/**/tests/fixtures/*.fseq

@@ -1,0 +1,43 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.99"
+repository = "https://github.com/your-name/light-show-anywhere"
+publish = false
+
+# One place for every dependency version. Crates opt in with `name.workspace = true`.
+[workspace.dependencies]
+lsa-fseq = { path = "crates/lsa-fseq" }
+lsa-tesla = { path = "crates/lsa-tesla" }
+
+thiserror = { version = "2.0.21", default-features = false }
+ruzstd = { version = "0.9.1", default-features = false }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+unused_must_use = "deny"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+pedantic = { level = "warn", priority = -1 }
+# Pedantic lints that are noisy for binary-format code.
+module_name_repetitions = "allow"
+cast_possible_truncation = "allow"
+cast_precision_loss = "allow"
+cast_sign_loss = "allow"
+missing_errors_doc = "allow"
+
+# Fast engine even in debug builds: optimize dependencies, keep our code debuggable.
+[profile.dev.package."*"]
+opt-level = 2
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+panic = "abort"
+strip = true

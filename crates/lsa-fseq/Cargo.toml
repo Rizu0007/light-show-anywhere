@@ -1,0 +1,23 @@
+[package]
+name = "lsa-fseq"
+description = "Reader and writer for FSEQ v2 light-show sequences (xLights / Tesla Light Show)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[features]
+default = ["zstd"]
+# Decode zstd-compressed sequences (pure Rust, works in the browser).
+zstd = ["dep:ruzstd"]
+
+[dependencies]
+thiserror.workspace = true
+ruzstd = { workspace = true, optional = true, features = ["std"] }
+
+[dev-dependencies]
+ruzstd = { workspace = true, features = ["std"] }
+
+[lints]
+workspace = true
