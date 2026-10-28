@@ -2,8 +2,20 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { CarView, type CarViewHandle } from "./car/CarView";
 import { ClosurePanel, type ClosurePanelHandle } from "./car/ClosurePanel";
 import { Show, VEHICLES, channelName, loadEngine, type Vehicle } from "./engine";
+import { HostPanel } from "./party/HostPanel";
+import { useHost } from "./party/useHost";
+import { useSyncedAudio } from "./party/useSyncedAudio";
 
 const UI_UPDATE_MS = 100;
+const SPEAKER_DELAY_KEY = "lsa.speakerDelayMs";
+
+function storedSpeakerDelay(): number {
+  try {
+    return Number(localStorage.getItem(SPEAKER_DELAY_KEY)) || 0;
+  } catch {
+    return 0;
+  }
+}
 
 function formatTime(ms: number): string {
   const total = Math.max(0, Math.floor(ms / 1000));
@@ -28,6 +40,28 @@ export function App() {
   const audio = useRef<HTMLAudioElement>(null);
   // Clock used when no song is loaded: time = offset + (now - startedAt).
   const clock = useRef({ offsetMs: 0, startedAt: 0 });
+  const showBytes = useRef<Uint8Array<ArrayBuffer> | null>(null);
+
+  const party = useHost();
+  const [speakerDelayMs, setSpeakerDelayMs] = useState(storedSpeakerDelay);
+  useSyncedAudio(audio, party, speakerDelayMs, audioUrl);
+  const isPlaying = party.active ? party.playback.playing : playing;
+
+  function changeSpeakerDelay(ms: number) {
+    setSpeakerDelayMs(ms);
+    try {
+      localStorage.setItem(SPEAKER_DELAY_KEY, String(ms));
+    } catch {
+      // Storage may be unavailable (private mode); the setting just isn't remembered.
+    }
+  }
+
+  // Send the current show to the party whenever it, the vehicle, or the party changes.
+  const partyLoad = useRef(party.load);
+  partyLoad.current = party.load;
+  useEffect(() => {
+    if (party.active && show && showBytes.current) partyLoad.current(showBytes.current, vehicle, showName);
+  }, [party.active, show, vehicle, showName]);
 
   useEffect(() => {
     loadEngine()
@@ -58,10 +92,11 @@ export function App() {
   }, [engineReady]);
 
   const currentMs = useCallback((): number => {
+    if (party.active) return party.positionNow();
     if (audio.current && audioUrl) return audio.current.currentTime * 1000;
     const { offsetMs, startedAt } = clock.current;
     return playing ? offsetMs + (performance.now() - startedAt) : offsetMs;
-  }, [audioUrl, playing]);
+  }, [audioUrl, playing, party.active, party.positionNow]);
 
   // Render loop: one emulated frame per screen refresh.
   useEffect(() => {
@@ -77,7 +112,7 @@ export function App() {
         lastUi = now;
         setTimeMs(ms);
       }
-      if (playing && ms >= show.durationMs) {
+      if (!party.active && playing && ms >= show.durationMs) {
         setPlaying(false);
         audio.current?.pause();
       }
@@ -85,7 +120,7 @@ export function App() {
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [show, playing, currentMs, revision]);
+  }, [show, playing, currentMs, revision, party.active]);
 
   async function loadFiles(files: FileList | File[], forVehicle: Vehicle = vehicle) {
     setError(null);
@@ -93,7 +128,9 @@ export function App() {
         const name = file.name.toLowerCase();
         if (name.endsWith(".fseq")) {
           try {
-            const next = new Show(new Uint8Array(await file.arrayBuffer()), forVehicle);
+            const bytes = new Uint8Array(await file.arrayBuffer());
+            const next = new Show(bytes, forVehicle);
+            showBytes.current = bytes;
             setShow((previous) => {
               previous?.free();
               return next;
@@ -119,6 +156,11 @@ export function App() {
 
   function play() {
     if (!show) return;
+    if (party.active) {
+      const position = party.positionNow();
+      party.play(position >= show.durationMs ? 0 : position);
+      return;
+    }
     if (currentMs() >= show.durationMs) seek(0);
     if (audio.current && audioUrl) {
       void audio.current.play();
@@ -129,6 +171,10 @@ export function App() {
   }
 
   function pause() {
+    if (party.active) {
+      party.pause();
+      return;
+    }
     if (audio.current && audioUrl) {
       audio.current.pause();
     } else {
@@ -138,6 +184,11 @@ export function App() {
   }
 
   function seek(ms: number) {
+    if (party.active) {
+      party.seek(ms);
+      setTimeMs(ms);
+      return;
+    }
     if (audio.current && audioUrl) audio.current.currentTime = ms / 1000;
     clock.current = { offsetMs: ms, startedAt: performance.now() };
     setTimeMs(ms);
@@ -213,8 +264,8 @@ export function App() {
       <CarView ref={car} showBars={showBars} nameOf={nameOf} />
 
       <section className="transport">
-        <button onClick={playing ? pause : play} disabled={!show}>
-          {playing ? "Pause" : "Play"}
+        <button onClick={isPlaying ? pause : play} disabled={!show}>
+          {isPlaying ? "Pause" : "Play"}
         </button>
         <input
           type="range"
@@ -249,9 +300,17 @@ export function App() {
         </section>
       )}
 
+      <HostPanel
+        party={party}
+        hasShow={!!show}
+        nameOf={nameOf}
+        speakerDelayMs={speakerDelayMs}
+        onSpeakerDelay={changeSpeakerDelay}
+      />
+
       <ClosurePanel ref={closures} nameOf={nameOf} />
 
-      {audioUrl && <audio ref={audio} src={audioUrl} preload="auto" onEnded={() => setPlaying(false)} />}
+      {audioUrl && <audio ref={audio} src={audioUrl} preload="auto" onEnded={() => !party.active && setPlaying(false)} />}
     </div>
   );
 }

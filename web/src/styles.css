@@ -224,3 +224,179 @@ button:disabled {
     flex-wrap: wrap;
   }
 }
+
+/* ---------------------------------------------------------------- party (host) */
+
+.party {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px 32px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.party h2,
+.party h3 {
+  margin: 0 0 6px;
+  font-size: 1.1rem;
+}
+
+.party.active {
+  align-items: flex-start;
+}
+
+.party-join {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.party-join img {
+  border-radius: 8px;
+  background: #fff;
+}
+
+.party-join > div {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  max-width: 420px;
+}
+
+.room-code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  letter-spacing: 0.15em;
+  color: var(--accent);
+}
+
+.join-url {
+  font-size: 0.8rem;
+  color: var(--muted);
+  word-break: break-all;
+}
+
+.delay {
+  display: grid;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--muted);
+}
+
+.delay input {
+  accent-color: var(--accent);
+}
+
+button.secondary {
+  background: #182030;
+  color: var(--text);
+  border: 1px solid var(--border);
+  justify-self: start;
+}
+
+.roster {
+  flex: 1;
+  min-width: 260px;
+}
+
+.roster ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  max-height: 260px;
+  overflow: auto;
+}
+
+.roster li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  font-size: 0.85rem;
+}
+
+.roster select {
+  padding: 4px 8px;
+  max-width: 200px;
+}
+
+/* ---------------------------------------------------------------- party (phone) */
+
+.phone-intro {
+  min-height: 100dvh;
+  display: grid;
+  align-content: center;
+  gap: 16px;
+  padding: 24px;
+  max-width: 420px;
+  margin: 0 auto;
+  text-align: center;
+}
+
+.phone-intro h1 {
+  margin: 0;
+}
+
+.phone-intro p {
+  margin: 0;
+  color: var(--muted);
+}
+
+.phone-intro label {
+  display: grid;
+  gap: 6px;
+  color: var(--muted);
+}
+
+.phone-intro input:not([type="checkbox"]) {
+  font: inherit;
+  font-size: 2rem;
+  text-align: center;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  padding: 10px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #10141b;
+  color: var(--text);
+}
+
+.phone-intro .check {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+}
+
+.phone-intro .safety {
+  font-size: 0.85rem;
+  color: var(--warn);
+}
+
+.phone-intro button {
+  font-size: 1.15rem;
+  padding: 14px;
+}
+
+.phone-light {
+  position: fixed;
+  inset: 0;
+  background: #000;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 24px;
+}
+
+.phone-label {
+  display: grid;
+  gap: 4px;
+  text-align: center;
+  color: rgba(255, 255, 255, 0.55);
+  mix-blend-mode: difference;
+  font-size: 0.9rem;
+}

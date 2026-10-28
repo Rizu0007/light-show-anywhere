@@ -11,7 +11,7 @@ phone is one light. See [docs/PLAN.md](docs/PLAN.md).
 | [`lsa-tesla`](crates/lsa-tesla) | Channel map, light/closure decoding, Tesla ramp emulation | ✅ Done (see limits in docs) |
 | [`lsa-wasm`](crates/lsa-wasm) | Browser bindings (129 KB WebAssembly) | ✅ Done |
 | [`web/`](web) | Viewer: front/rear car plays any show with its song | ✅ Done |
-| `lsa-server` | Rooms and clock sync for phone parties | Next |
+| [`lsa-server`](crates/lsa-server) | Party server: rooms, clock sync, light assignment, per-phone tracks | ✅ Done |
 
 ## Run the viewer
 
@@ -24,6 +24,28 @@ npm run dev          # builds the engine to WebAssembly, then opens http://local
 Drop a `.fseq` show and its `.wav`/`.mp3` onto the page, pick a vehicle, press Play.
 Development shortcut: `http://localhost:5173/?show=/@fs/<absolute path>.fseq&t=12000&vehicle=cybertruck`
 opens a file from disk at 12 s.
+
+## Run a party (phones as lights)
+
+```bash
+cargo run --release -p lsa-server        # terminal 1: party server on :8787
+cd web && npm run dev                    # terminal 2: app on :5173 (proxies /ws to the server)
+```
+
+1. On the host computer, open the app using its **network address** (the `Network:` line Vite
+   prints, e.g. `http://192.168.1.20:5173`) — phones cannot reach `localhost`.
+2. Load a show (and its song), press **Start party**, show the QR code.
+3. Phones on the same Wi-Fi scan it and tap **Join**; each becomes one light.
+4. Press **Play**. Use **Speaker delay** if sound arrives after the lights (Bluetooth speakers).
+
+Over plain `http` on a LAN, phones can't keep the screen awake or use the flashlight (browsers
+require HTTPS for those); the light itself works.
+
+End-to-end check with real headless-Chrome phones (needs both servers running):
+
+```bash
+cd web && node scripts/party-e2e.mjs ../shows/<show>.fseq [channel] [seconds]
+```
 
 ## Requirements
 
