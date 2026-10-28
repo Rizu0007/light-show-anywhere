@@ -12,6 +12,7 @@ use tokio::sync::mpsc::UnboundedSender;
 
 use crate::lights::{color_of, parse_vehicle, playable_channels};
 use crate::protocol::{RosterEntry, ServerMsg, encode_track};
+use crate::safety::govern;
 
 /// Delay between a play command and the show actually starting, so every phone receives it
 /// in time.
@@ -420,7 +421,7 @@ impl Room {
                 show.version,
                 number,
                 step_ms,
-                &levels,
+                &govern(&levels, step_ms),
             )));
         }
     }

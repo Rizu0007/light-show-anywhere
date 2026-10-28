@@ -2,7 +2,8 @@
 //!
 //! One WebSocket (`/ws`) per browser carries clock sync, room membership, host commands, the
 //! uploaded show and each phone's light track. The server renders shows with `lsa-tesla`, so a
-//! phone downloads only its own light (one byte per frame) instead of the whole file.
+//! phone downloads only its own light (one byte per frame) instead of the whole file. Every
+//! track passes through the [`safety`] governor first.
 //!
 //! Clock sync follows the approach documented by Crowd Light Show
 //! (<https://github.com/AndriiShramko/crowd-light-show>, Apache-2.0): clients ping, the server
@@ -11,6 +12,7 @@
 pub mod lights;
 pub mod protocol;
 pub mod room;
+pub mod safety;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;

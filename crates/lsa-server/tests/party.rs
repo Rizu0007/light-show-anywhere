@@ -6,6 +6,7 @@ use std::time::Duration;
 use futures_util::{SinkExt, StreamExt};
 use lsa_fseq::Sequence;
 use lsa_server::protocol::{TRACK_HEADER_LEN, TRACK_MAGIC};
+use lsa_server::safety::govern;
 use lsa_server::{AppState, app};
 use lsa_tesla::{Channel, Light, Side, Vehicle, render};
 use serde_json::{Value, json};
@@ -164,15 +165,18 @@ async fn phones_get_lights_and_tracks_in_priority_order() {
     assert_eq!(role["label"], "Left Outer Main Beam");
     assert_eq!(role["color"], "white");
 
-    // The track equals the engine's own emulation of that channel.
+    // The track is the engine's own emulation of that channel, made safe: the beam strobes
+    // every frame, which the governor slows down.
     let track = first.expect_binary().await;
     assert_eq!(track[..4], TRACK_MAGIC);
     assert_eq!(u16::from_le_bytes([track[8], track[9]]), 1);
     assert_eq!(track[10], 20);
-    let expected = render(&Sequence::parse(&test_show()).unwrap(), Vehicle::Model3Y)
+    let emulated = render(&Sequence::parse(&test_show()).unwrap(), Vehicle::Model3Y)
         .channel_track(0)
         .unwrap();
-    assert_eq!(track[TRACK_HEADER_LEN..], expected[..]);
+    let governed = govern(&emulated, 20);
+    assert_ne!(governed, emulated);
+    assert_eq!(track[TRACK_HEADER_LEN..], governed[..]);
 
     // Next phone gets the next used light in priority order (front turn before brake).
     let mut second = Client::connect(&url).await;
@@ -251,8 +255,11 @@ async fn host_can_pin_a_phone_to_a_light() {
     let role = phone.expect("role").await;
     assert_eq!(role["channel"], brake);
     assert_eq!(role["color"], "red");
+    // The brake is on all show; the governor only ramps it in from dark.
     let track = phone.expect_binary().await;
-    assert!(track[TRACK_HEADER_LEN..].iter().all(|&level| level == 255));
+    let levels = &track[TRACK_HEADER_LEN..];
+    assert!(levels[0] < 255);
+    assert!(levels[8..].iter().all(|&level| level == 255));
 }
 
 #[tokio::test]

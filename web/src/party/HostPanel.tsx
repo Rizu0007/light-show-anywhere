@@ -32,7 +32,10 @@ export function HostPanel({ party, hasShow, nameOf, speakerDelayMs, onSpeakerDel
       <section className="party">
         <div>
           <h2>Party mode</h2>
-          <p className="hint">Friends scan a QR code and each phone becomes one light of the car.</p>
+          <p className="hint">
+            Friends scan a QR code and each phone becomes one light of the car. For safety, phones flash at most 3
+            times a second, so fast strobes look calmer than in the preview above.
+          </p>
         </div>
         <button onClick={party.start} disabled={!hasShow}>
           Start party

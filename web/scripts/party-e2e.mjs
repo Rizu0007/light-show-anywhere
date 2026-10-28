@@ -5,8 +5,9 @@
 //   node scripts/party-e2e.mjs <show.fseq> [channel] [seconds]
 //
 // The host bot creates a room, uploads the show, pins every phone to the same light and plays.
-// Each phone records when its light changes on the shared clock; the script compares those
-// moments with the show's own frame timing and with each other.
+// Each phone records when its light crosses half brightness on the shared clock; the script
+// compares those moments with the frame timing of the track the phone received (the show after
+// the safety governor) and with each other.
 
 import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
@@ -42,11 +43,9 @@ async function until(check, what, timeoutMs = 15000) {
 
 const bytes = new Uint8Array(readFileSync(showPath));
 const view = new DataView(bytes.buffer);
-const dataOffset = view.getUint16(4, true);
 const channelCount = view.getUint32(10, true);
 const frameCount = view.getUint32(14, true);
 const stepMs = bytes[18];
-const levelAt = (frame) => (bytes[dataOffset + frame * channelCount + CHANNEL - 1] >= 128 ? 255 : 0);
 
 // ------------------------------------------------------------------ host bot
 
@@ -166,7 +165,10 @@ try {
   await sleep(LISTEN_MS + 1500);
 
   // Expected changes within the listened window.
-  const lastFrame = Math.min(frameCount, Math.floor(LISTEN_MS / stepMs));
+  // On/off per frame of the governed track phone 1 received (all phones play the same light).
+  const levels = await phones[0].evaluate("Array.from(window.__lsaTrack?.levels ?? [])");
+  const levelAt = (frame) => (levels[frame] >= 128 ? 255 : 0);
+  const lastFrame = Math.min(levels.length, Math.floor(LISTEN_MS / stepMs));
   const expected = [];
   for (let f = 1; f < lastFrame; f++) {
     if (levelAt(f) !== levelAt(f - 1)) expected.push({ server: t0 + f * stepMs, level: levelAt(f) });

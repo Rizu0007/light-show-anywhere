@@ -133,6 +133,8 @@ export function PhonePage() {
       },
       onTrack: (t) => {
         track.current = t;
+        // Development: the governed track as received, read by scripts/party-e2e.mjs.
+        if (import.meta.env.DEV) (window as unknown as { __lsaTrack: Track }).__lsaTrack = t;
       },
       onClose: () => setStatus((s) => (s === "intro" ? s : "ended")),
     });
@@ -144,8 +146,9 @@ export function PhonePage() {
   useEffect(() => {
     if (status !== "joined") return;
     let frame = 0;
-    let lastLevel = -1;
-    // Development: on/off transitions on the shared clock, read by scripts/party-e2e.mjs.
+    let lastOn: boolean | null = null;
+    // Development: on/off changes (crossing half brightness) on the shared clock, read by
+    // scripts/party-e2e.mjs.
     const transitions: { server: number; level: number }[] = [];
     if (import.meta.env.DEV) (window as unknown as { __lsaTransitions: typeof transitions }).__lsaTransitions = transitions;
     const tick = () => {
@@ -161,10 +164,11 @@ export function PhonePage() {
         const index = Math.floor(position / t.stepMs);
         level = index >= 0 && index < t.levels.length ? t.levels[index] : 0;
       }
-      if (import.meta.env.DEV && level !== lastLevel && sync?.ready) {
-        transitions.push({ server: sync.serverNow(), level });
+      const on = level >= 128;
+      if (import.meta.env.DEV && on !== lastOn && sync?.ready) {
+        transitions.push({ server: sync.serverNow(), level: on ? 255 : 0 });
       }
-      lastLevel = level;
+      lastOn = on;
       const [r, g, b] = COLORS[roleRef.current.color ?? "white"] ?? COLORS.white;
       const k = level / 255;
       if (el) el.style.backgroundColor = `rgb(${Math.round(r * k)},${Math.round(g * k)},${Math.round(b * k)})`;
@@ -202,7 +206,8 @@ export function PhonePage() {
           <span>Also use the flashlight (Android)</span>
         </label>
         <p className="safety">
-          ⚠ This show contains flashing lights. If you are sensitive to flashing light, please do not join.
+          ⚠ This show contains flashing lights (limited to 3 flashes a second). If you are sensitive to flashing
+          light, please do not join.
         </p>
         {message && <p className="error">{message}</p>}
         <button onClick={() => void join()} disabled={status === "connecting" || room.trim().length < 4}>
