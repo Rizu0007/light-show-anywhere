@@ -38,6 +38,12 @@
   treated as reserved.
 - Closure positions and dance motion are preview approximations; Tesla only publishes travel
   times.
+- Shared outputs (`Vehicle::wiring`): each channel of a shared light combines the same source
+  channels with OR and takes its ramp time from the same leader, so all of them render the same
+  level. Channel 4 leads 5–6 per side (the README does not say per side; assumed).
+- Cybertruck: tail → reverse lights, reverse → bed lights (always 500 ms ramp), left aux park
+  → frunk light, side repeaters → rear side markers; fog lights, right aux park and rear turn
+  have no Cybertruck light in the template.
 
 ## FSEQ notes
 

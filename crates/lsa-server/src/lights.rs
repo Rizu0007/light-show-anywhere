@@ -70,9 +70,18 @@ pub fn playable_channels(rendered: &Rendered) -> Vec<u16> {
         .collect()
 }
 
-/// Colour a phone shows for a channel.
+/// Colour a phone shows for a channel on `vehicle`.
 #[must_use]
-pub fn color_of(channel: Channel) -> &'static str {
+pub fn color_of(vehicle: Vehicle, channel: Channel) -> &'static str {
+    // Cybertruck remapping: tail channels drive the reverse lights, side repeaters the rear
+    // side markers.
+    if vehicle == Vehicle::Cybertruck {
+        match channel {
+            Channel::Light(Light::Tail(_)) => return "white",
+            Channel::Light(Light::SideRepeater(_)) => return "red",
+            _ => {}
+        }
+    }
     match channel {
         Channel::Light(
             Light::FrontTurn(_)

@@ -204,8 +204,8 @@ export function App() {
 
   const channelCount = show?.channelCount ?? 200;
   const nameOf = useCallback(
-    (channel: number) => (engineReady ? channelName(channel - 1, channelCount) : `Channel ${channel}`),
-    [engineReady, channelCount],
+    (channel: number) => (engineReady ? channelName(channel - 1, channelCount, vehicle) : `Channel ${channel}`),
+    [engineReady, channelCount, vehicle],
   );
   const showBars = vehicle === "cybertruck" && channelCount > 48;
   const duration = show?.durationMs ?? 0;

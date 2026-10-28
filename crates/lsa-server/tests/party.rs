@@ -298,3 +298,31 @@ async fn phones_are_told_when_the_host_leaves() {
     let error = phone.expect("error").await;
     assert!(error["message"].as_str().unwrap().contains("ended"));
 }
+
+#[tokio::test]
+async fn cybertruck_phones_get_remapped_names_and_colours() {
+    let url = start_server().await;
+    let mut host = Client::connect(&url).await;
+    host.send(json!({"t": "create"})).await;
+    let room = host.expect("created").await["room"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    host.send(json!({"t": "load", "vehicle": "cybertruck", "name": "CT"}))
+        .await;
+    host.send_binary(test_show()).await;
+    host.expect("show").await;
+
+    let mut phone = Client::connect(&url).await;
+    phone.send(json!({"t": "join", "room": room})).await;
+    let id = phone.expect("joined").await["id"].as_u64().unwrap();
+    phone.expect("role").await;
+
+    // On Cybertruck the tail channels drive the (white) reverse lights.
+    let tail = Channel::Light(Light::Tail(Side::Left)).number().unwrap();
+    host.send(json!({"t": "assign", "member": id, "channel": tail}))
+        .await;
+    let role = phone.expect("role").await;
+    assert_eq!(role["label"], "Left Reverse Light");
+    assert_eq!(role["color"], "white");
+}

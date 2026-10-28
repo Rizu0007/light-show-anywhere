@@ -101,10 +101,17 @@ impl Show {
     }
 }
 
-/// Human-readable name of the channel at 0-based `index`.
+/// Human-readable name of the channel at 0-based `index`, using `vehicle`'s name for it when
+/// given (Cybertruck remaps some channels to other lights).
 #[wasm_bindgen(js_name = channelName)]
-pub fn channel_name(index: usize, channel_count: usize) -> String {
-    Channel::from_index(index, channel_count).to_string()
+// wasm-bindgen needs an owned `Option<String>` for an optional string argument.
+#[allow(clippy::needless_pass_by_value)]
+pub fn channel_name(index: usize, channel_count: usize, vehicle: Option<String>) -> String {
+    let channel = Channel::from_index(index, channel_count);
+    match vehicle.as_deref().map(parse_vehicle) {
+        Some(Ok(vehicle)) => vehicle.channel_name(channel),
+        _ => channel.to_string(),
+    }
 }
 
 fn parse_vehicle(name: &str) -> Result<Vehicle, JsError> {

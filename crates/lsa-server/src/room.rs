@@ -395,10 +395,11 @@ impl Room {
             (Some(show), Some(number)) => {
                 let count = show.rendered.channel_count();
                 let channel = Channel::from_index(usize::from(number) - 1, count);
+                let vehicle = show.rendered.vehicle();
                 (
                     count,
-                    Some(channel.to_string()),
-                    Some(color_of(channel).to_owned()),
+                    Some(vehicle.channel_name(channel)),
+                    Some(color_of(vehicle, channel).to_owned()),
                 )
             }
             _ => (0, None, None),

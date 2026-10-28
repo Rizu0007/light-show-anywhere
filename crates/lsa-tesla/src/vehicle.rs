@@ -1,10 +1,15 @@
 //! How each vehicle responds to each channel.
 //!
-//! From the "Light Channels with Brightness Control" and "Closures channels" tables in Tesla's
-//! README. Outer main beams are modelled as LED reflector headlights (ramping); vehicles with
+//! From the "Light Channels with Brightness Control", "Closures channels" and "Light channel
+//! mapping details" sections of Tesla's README, and the Cybertruck models in Tesla's xLights
+//! template. Outer main beams are modelled as LED reflector headlights (ramping); vehicles with
 //! LED projector headlights switch them on and off instantly instead.
+//!
+//! Not modelled: Model 3 built before October 2020 (tail and license plate lights on one
+//! output), and regional or trim differences (side markers only in North America, no fog
+//! lights on Model 3 Standard Range +).
 
-use crate::channel::{Channel, Closure, Light};
+use crate::channel::{Channel, Closure, Light, Side};
 
 /// A Tesla model family with its own light behaviour.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -32,6 +37,27 @@ pub enum Behavior {
     Closure,
     /// The vehicle has no such light or part.
     Absent,
+}
+
+/// How a light's channel is wired on a vehicle (see [`Vehicle::wiring`]).
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct Wiring {
+    /// Channels whose on/off states are combined with OR to switch this light.
+    pub sources: Vec<Channel>,
+    /// Channel whose command sets the ramp time.
+    pub ramp_from: Channel,
+    /// Ramp time used for every change, whatever the commands say.
+    pub fixed_ramp_ms: Option<u16>,
+}
+
+impl Wiring {
+    fn own(channel: Channel) -> Self {
+        Self {
+            sources: vec![channel],
+            ramp_from: channel,
+            fixed_ramp_ms: None,
+        }
+    }
 }
 
 impl Vehicle {
@@ -68,15 +94,20 @@ impl Vehicle {
                 ModelS | ModelX | Model3Y,
             )
             | (Light::FrontTurn(_), Model3Y | Cybertruck)
-            | (Light::SideMarker(_), Cybertruck) => Ramping,
+            // Reverse: Cybertruck bed lights, which always ramp over 500 ms (see `wiring`).
+            | (Light::SideMarker(_) | Light::Reverse, Cybertruck) => Ramping,
 
-            // Rear turn: "L/R Rear Turn Signals have been disabled" on Cybertruck (remapping notes).
+            // Rear turn: "L/R Rear Turn Signals have been disabled" on Cybertruck (remapping
+            // notes). Fog lights and right aux park: the template has no Cybertruck light there.
             (
                 Light::Signature(_)
                 | Light::Channel4(_)
                 | Light::Channel5(_)
                 | Light::Channel6(_)
-                | Light::RearTurn(_),
+                | Light::RearTurn(_)
+                | Light::FrontFog(_)
+                | Light::RearFog
+                | Light::AuxPark(Side::Right),
                 Cybertruck,
             ) => Absent,
 
@@ -84,6 +115,89 @@ impl Vehicle {
 
             _ => Boolean,
         }
+    }
+
+    /// Which channels drive the light on `channel`, and where its ramp time comes from.
+    ///
+    /// Several channels can share one physical output (Tesla ORs their on/off state), and on
+    /// channels 4–6 the ramp time always comes from channel 4. Every channel of a shared output
+    /// gets the same wiring, so they all show the same level.
+    #[must_use]
+    pub fn wiring(self, channel: Channel) -> Wiring {
+        let Channel::Light(light) = channel else {
+            return Wiring::own(channel);
+        };
+        let lights = |lights: &[Light]| lights.iter().map(|&l| Channel::Light(l)).collect();
+        let own = Wiring::own(channel);
+        match (light, self) {
+            // "On Model 3/Y, all aux park and side markers operate together."
+            (Light::AuxPark(_) | Light::SideMarker(_), Self::Model3Y) => Wiring {
+                sources: lights(&[
+                    Light::SideMarker(Side::Left),
+                    Light::AuxPark(Side::Left),
+                    Light::SideMarker(Side::Right),
+                    Light::AuxPark(Side::Right),
+                ]),
+                ..own
+            },
+            // Model S: together, but with independent left/right control.
+            (Light::AuxPark(side) | Light::SideMarker(side), Self::ModelS) => Wiring {
+                sources: lights(&[Light::SideMarker(side), Light::AuxPark(side)]),
+                ..own
+            },
+            // Model 3/Y: channels 4–6 are one output, ORed; channel 4 sets the ramp time.
+            (
+                Light::Channel4(side) | Light::Channel5(side) | Light::Channel6(side),
+                Self::Model3Y,
+            ) => Wiring {
+                sources: lights(&[
+                    Light::Channel4(side),
+                    Light::Channel5(side),
+                    Light::Channel6(side),
+                ]),
+                ramp_from: Channel::Light(Light::Channel4(side)),
+                ..own
+            },
+            // Model S/X: individual on/off, but channel 4 sets the ramp time for all three.
+            (
+                Light::Channel4(side) | Light::Channel5(side) | Light::Channel6(side),
+                Self::ModelS | Self::ModelX,
+            ) => Wiring {
+                ramp_from: Channel::Light(Light::Channel4(side)),
+                ..own
+            },
+            // "Cybertruck Bed Lights always ramp on and off with a 500 ms duration."
+            (Light::Reverse, Self::Cybertruck) => Wiring {
+                fixed_ramp_ms: Some(500),
+                ..own
+            },
+            _ => own,
+        }
+    }
+
+    /// What `channel` is called on this vehicle. Cybertruck remaps some channels to other
+    /// lights (README, "Cybertruck Light Remapping").
+    #[must_use]
+    pub fn channel_name(self, channel: Channel) -> String {
+        if self == Self::Cybertruck {
+            let renamed = match channel {
+                Channel::Light(Light::Tail(side)) => Some(format!("{side} Reverse Light")),
+                Channel::Light(Light::SideMarker(side)) => {
+                    Some(format!("{side} Front Side Marker"))
+                }
+                Channel::Light(Light::SideRepeater(side)) => {
+                    Some(format!("{side} Rear Side Marker"))
+                }
+                Channel::Light(Light::AuxPark(Side::Left)) => Some("Frunk Light".into()),
+                Channel::Light(Light::Reverse) => Some("Bed Lights".into()),
+                Channel::Closure(Closure::Liftgate) => Some("Powered Frunk".into()),
+                _ => None,
+            };
+            if let Some(name) = renamed {
+                return name;
+            }
+        }
+        channel.to_string()
     }
 
     fn has_closure(self, closure: Closure) -> bool {
