@@ -28,6 +28,12 @@ tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
 tokio-tungstenite = "0.30.0"
 futures-util = "0.3.34"
+# HTTPS for the party server (ring avoids aws-lc's C/CMake build)
+axum-server = { version = "0.8.0", default-features = false, features = ["tls-rustls-no-provider"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12", "logging"] }
+rcgen = { version = "0.14.10", default-features = false, features = ["crypto", "pem", "ring"] }
+if-addrs = "0.15.0"
+time = { version = "0.3.55", default-features = false, features = ["std"] }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"

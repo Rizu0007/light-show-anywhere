@@ -6,6 +6,7 @@
   "scripts": {
     "wasm": "wasm-pack build ../crates/lsa-wasm --target web --release --out-dir ../../web/src/engine/pkg --no-pack",
     "dev": "npm run wasm && vite",
+    "dev:https": "npm run wasm && LSA_HTTPS=1 vite",
     "build": "npm run wasm && tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"

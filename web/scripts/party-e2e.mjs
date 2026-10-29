@@ -3,6 +3,7 @@
 //
 // Needs `cargo run -p lsa-server` and `npm run dev` running. Usage:
 //   node scripts/party-e2e.mjs <show.fseq> [channel] [seconds]
+// Over HTTPS (`lsa-server --tls` and `npm run dev:https`): APP=https://localhost:5173 node ...
 //
 // The host bot creates a room, uploads the show, pins every phone to the same light and plays.
 // Each phone records when its light crosses half brightness on the shared clock; the script
@@ -22,7 +23,9 @@ if (!showPath) {
 const CHANNEL = Number(channelArg);
 const LISTEN_MS = Number(secondsArg) * 1000;
 const PHONES = 2;
-const APP = "http://localhost:5173";
+const APP = process.env.APP ?? "http://localhost:5173";
+// The party certificate is self-signed; trust it for this test only.
+if (APP.startsWith("https:")) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 const CHROME = process.env.CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const DEBUG_PORT = 9333;
 const MAX_ERROR_MS = 40; // one 20 ms frame plus one 60 Hz screen refresh, with margin
@@ -75,6 +78,7 @@ async function chromeSession() {
     `--remote-debugging-port=${DEBUG_PORT}`,
     `--user-data-dir=${profile}`,
     "--no-first-run",
+    "--ignore-certificate-errors",
     "--disable-background-timer-throttling",
     "--disable-renderer-backgrounding",
     "--disable-backgrounding-occluded-windows",

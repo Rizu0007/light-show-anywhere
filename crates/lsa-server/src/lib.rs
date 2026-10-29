@@ -3,7 +3,8 @@
 //! One WebSocket (`/ws`) per browser carries clock sync, room membership, host commands, the
 //! uploaded show and each phone's light track. The server renders shows with `lsa-tesla`, so a
 //! phone downloads only its own light (one byte per frame) instead of the whole file. Every
-//! track passes through the [`safety`] governor first.
+//! track passes through the [`safety`] governor first. With [`tls::Tls`] the server speaks HTTPS,
+//! which phones need to keep the screen awake and use the flashlight.
 //!
 //! Clock sync follows the approach documented by Crowd Light Show
 //! (<https://github.com/AndriiShramko/crowd-light-show>, Apache-2.0): clients ping, the server
@@ -13,6 +14,7 @@ pub mod lights;
 pub mod protocol;
 pub mod room;
 pub mod safety;
+pub mod tls;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -78,15 +80,60 @@ pub fn app(state: Arc<AppState>, static_dir: Option<PathBuf>) -> Router {
     }
 }
 
-/// Runs the server until Ctrl+C.
-pub async fn serve(addr: SocketAddr, static_dir: Option<PathBuf>) -> std::io::Result<()> {
-    let listener = tokio::net::TcpListener::bind(addr).await?;
-    tracing::info!("listening on http://{}", listener.local_addr()?);
-    axum::serve(listener, app(Arc::default(), static_dir))
-        .with_graceful_shutdown(async {
-            let _ = tokio::signal::ctrl_c().await;
-        })
+/// Runs the server until Ctrl+C, over HTTPS when `tls` is given.
+pub async fn serve(
+    addr: SocketAddr,
+    static_dir: Option<PathBuf>,
+    tls: Option<tls::Tls>,
+) -> std::io::Result<()> {
+    let app = app(Arc::default(), static_dir);
+    let Some(tls) = tls else {
+        let listener = tokio::net::TcpListener::bind(addr).await?;
+        log_addresses("http", listener.local_addr()?);
+        return axum::serve(listener, app)
+            .with_graceful_shutdown(async {
+                let _ = tokio::signal::ctrl_c().await;
+            })
+            .await;
+    };
+
+    // Only one crypto provider is compiled in, so installing it cannot conflict.
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let pem = tokio::task::spawn_blocking(move || tls.load())
         .await
+        .map_err(std::io::Error::other)??;
+    let config = axum_server::tls_rustls::RustlsConfig::from_pem(pem.cert, pem.key).await?;
+    let handle = axum_server::Handle::new();
+    let shutdown = handle.clone();
+    tokio::spawn(async move {
+        let _ = tokio::signal::ctrl_c().await;
+        shutdown.graceful_shutdown(None);
+    });
+    let listening = handle.clone();
+    tokio::spawn(async move {
+        if let Some(addr) = listening.listening().await {
+            log_addresses("https", addr);
+        }
+    });
+    axum_server::bind_rustls(addr, config)
+        .handle(handle)
+        .serve(app.into_make_service())
+        .await
+}
+
+/// Logs the addresses to open, with network addresses first when listening on all of them.
+fn log_addresses(scheme: &str, addr: SocketAddr) {
+    if addr.ip().is_unspecified() {
+        for ip in tls::lan_addresses() {
+            tracing::info!(
+                "listening on {scheme}://{}",
+                SocketAddr::new(ip, addr.port())
+            );
+        }
+        tracing::info!("listening on {scheme}://localhost:{}", addr.port());
+    } else {
+        tracing::info!("listening on {scheme}://{addr}");
+    }
 }
 
 async fn ws_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) -> Response {

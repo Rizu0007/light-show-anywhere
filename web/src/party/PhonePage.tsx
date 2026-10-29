@@ -234,6 +234,7 @@ export function PhonePage() {
         <span>
           Room {room} · {synced ? "synced" : "syncing…"}
           {torchAvailable === false && " · no flashlight"}
+          {!window.isSecureContext && " · screen may sleep (not HTTPS)"}
         </span>
         {message && <span className="error">{message}</span>}
       </div>

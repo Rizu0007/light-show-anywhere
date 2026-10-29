@@ -27,24 +27,44 @@ opens a file from disk at 12 s.
 
 ## Run a party (phones as lights)
 
+Phones only keep the screen awake and use the flashlight on **HTTPS** pages, so a real party runs
+with `--tls`. The server then makes its own certificate for this computer's network addresses and
+keeps it in `.lsa-tls/` (git-ignored).
+
 ```bash
-cargo run --release -p lsa-server        # terminal 1: party server on :8787
-cd web && npm run dev                    # terminal 2: app on :5173 (proxies /ws to the server)
+(cd web && npm install && npm run build)
+cargo run --release -p lsa-server -- --tls --static web/dist   # app + party server on :8787
 ```
 
-1. On the host computer, open the app using its **network address** (the `Network:` line Vite
-   prints, e.g. `http://192.168.1.20:5173`) — phones cannot reach `localhost`.
+1. On the host computer, open the **https://** network address the server prints (e.g.
+   `https://192.168.1.20:8787`), not `localhost`, since phones cannot reach that. Accept the
+   certificate warning once.
 2. Load a show (and its song), press **Start party**, show the QR code.
-3. Phones on the same Wi-Fi scan it and tap **Join**; each becomes one light.
+3. Phones on the same Wi-Fi scan it and tap **Join**. Each phone warns about the certificate once
+   (Chrome: *Advanced → Proceed*; Safari: *Show Details → visit this website*). Each becomes one
+   light.
 4. Press **Play**. Use **Speaker delay** if sound arrives after the lights (Bluetooth speakers).
 
-Over plain `http` on a LAN, phones can't keep the screen awake or use the flashlight (browsers
-require HTTPS for those); the light itself works.
+The certificate is reused, so phones are not warned again. It is renewed (and phones warn once
+more) when the computer joins a network it does not cover yet, or a month before it expires. With
+a real certificate for a domain, use `--cert cert.pem --key key.pem` instead of `--tls`.
+
+While developing, run the app with Vite instead (hot reload):
+
+```bash
+cargo run --release -p lsa-server -- --tls   # terminal 1: party server (creates .lsa-tls/ first)
+cd web && npm run dev:https                  # terminal 2: app on https://<address>:5173
+```
+
+`npm run dev` and a server without `--tls` work over plain `http`; the lights work, but phones
+may sleep and the flashlight is off.
 
 End-to-end check with real headless-Chrome phones (needs both servers running):
 
 ```bash
 cd web && node scripts/party-e2e.mjs ../shows/<show>.fseq [channel] [seconds]
+# over HTTPS (lsa-server --tls, npm run dev:https):
+cd web && APP=https://localhost:5173 node scripts/party-e2e.mjs ../shows/<show>.fseq
 ```
 
 ## Requirements

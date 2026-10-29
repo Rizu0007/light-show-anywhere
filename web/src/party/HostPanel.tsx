@@ -62,6 +62,12 @@ export function HostPanel({ party, hasShow, nameOf, speakerDelayMs, onSpeakerDel
               server, e.g. http://192.168.1.20:5173) before sharing the QR code.
             </p>
           )}
+          {!isLocalhost && !window.isSecureContext && (
+            <p className="warn">
+              This page is not on HTTPS, so phones can't keep their screens awake or use the flashlight. Start the
+              server with <code>--tls</code> and open the https:// address it prints.
+            </p>
+          )}
           {party.error && <p className="error">{party.error}</p>}
           <label className="delay">
             <span>Speaker delay: {speakerDelayMs} ms</span>

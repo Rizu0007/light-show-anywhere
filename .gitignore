@@ -8,3 +8,6 @@
 *.mp3
 *.wav
 !crates/**/tests/fixtures/*.fseq
+
+# Party server certificate (lsa-server --tls)
+/.lsa-tls/
