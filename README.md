@@ -43,7 +43,11 @@ cargo run --release -p lsa-server -- --tls --static web/dist   # app + party ser
 3. Phones on the same Wi-Fi scan it and tap **Join**. Each phone warns about the certificate once
    (Chrome: *Advanced → Proceed*; Safari: *Show Details → visit this website*). Each becomes one
    light.
-4. Press **Play**. Use **Speaker delay** if sound arrives after the lights (Bluetooth speakers).
+4. Press **Play**. If sound arrives after the lights (Bluetooth speakers), set **Speaker
+   delay**, or let the phones measure it: guests who tick *Help tune the sound* lend their
+   microphone, **Measure speaker delay** plays five short tones through the speaker, and
+   **Use … ms** applies the median of what the phones heard. Measure with the speaker you will
+   use for the song, with the show paused.
 
 Dropped connections are fine: a phone that loses Wi-Fi, locks its screen or reloads the page
 gets its light back when it returns, and keeps playing on its own meanwhile. If the host computer
@@ -72,6 +76,9 @@ cd web && node scripts/party-e2e.mjs ../shows/<show>.fseq [channel] [seconds]
 cd web && APP=https://localhost:5173 node scripts/party-e2e.mjs ../shows/<show>.fseq
 # cut phone 1's connection halfway; it must reconnect and keep time:
 cd web && DROP=1 node scripts/party-e2e.mjs ../shows/<show>.fseq
+# speaker calibration (needs only `npm run dev`): detector on synthetic recordings, then the
+# whole browser pipeline with the tones wired into a fake microphone through a known delay
+cd web && node scripts/chirp-test.mjs && node scripts/calibrate-e2e.mjs
 ```
 
 ## Requirements

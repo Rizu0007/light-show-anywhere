@@ -258,6 +258,8 @@ fn handle(
         ClientMsg::Pause => state.rooms().pause(id, now),
         ClientMsg::Seek { position_ms } => state.rooms().seek(id, position_ms, now),
         ClientMsg::Assign { member, channel } => state.rooms().assign(id, member, channel),
+        ClientMsg::Calibrate => state.rooms().calibrate(id, now),
+        ClientMsg::Heard { delay_ms } => state.rooms().heard(id, delay_ms),
         ClientMsg::Leave => {
             state.rooms().leave(id);
             Ok(())

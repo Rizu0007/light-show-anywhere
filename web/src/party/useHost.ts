@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { playTones } from "./calibrate";
 import { ClockSync, startClockSync } from "./clock";
 import { connect, type Connection, type ServerMsg } from "./connection";
 
@@ -16,6 +17,12 @@ export interface PartyPlayback {
   positionMs: number;
 }
 
+/** A speaker measurement: tones played at `at`, and what each listening phone heard. */
+export interface Calibration {
+  at: number;
+  heard: { member: number; delayMs: number | null }[];
+}
+
 export interface HostParty {
   active: boolean;
   room: string | null;
@@ -23,6 +30,8 @@ export interface HostParty {
   synced: boolean;
   roster: RosterMember[];
   error: string | null;
+  /** Latest speaker measurement, if any. */
+  calibration: Calibration | null;
   /** Latest playback state from the server. */
   playback: PartyPlayback;
   /** Show position right now on the shared clock (what every phone shows). */
@@ -36,6 +45,8 @@ export interface HostParty {
   pause: () => void;
   seek: (positionMs: number) => void;
   assign: (member: number, channel: number | null) => void;
+  /** Plays calibration tones for phones with a microphone to measure (call from a click). */
+  calibrate: () => void;
 }
 
 /** Hosts a party: owns the connection, the shared clock and the room's state. */
@@ -47,6 +58,8 @@ export function useHost(): HostParty {
   const [roster, setRoster] = useState<RosterMember[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [playback, setPlayback] = useState<PartyPlayback>({ playing: false, t0: null, positionMs: 0 });
+  const [calibration, setCalibration] = useState<Calibration | null>(null);
+  const audioContext = useRef<AudioContext | null>(null);
 
   const conn = useRef<Connection | null>(null);
   const clock = useRef<ClockSync | null>(null);
@@ -122,6 +135,21 @@ export function useHost(): HostParty {
           case "roster":
             setRoster(msg.members);
             break;
+          case "calibrate":
+            setCalibration({ at: msg.at, heard: [] });
+            if (audioContext.current && clock.current) {
+              const sync = clock.current;
+              void playTones(audioContext.current, () => sync.serverNow(), msg);
+            }
+            break;
+          case "heard":
+            setCalibration((c) =>
+              c && {
+                ...c,
+                heard: [...c.heard.filter((h) => h.member !== msg.member), { member: msg.member, delayMs: msg.delayMs }],
+              },
+            );
+            break;
           case "error":
             setError(msg.message);
             break;
@@ -167,6 +195,7 @@ export function useHost(): HostParty {
     synced,
     roster,
     error,
+    calibration,
     playback,
     positionNow,
     serverNow,
@@ -177,5 +206,11 @@ export function useHost(): HostParty {
     pause: () => conn.current?.send({ t: "pause" }),
     seek: (positionMs) => conn.current?.send({ t: "seek", positionMs }),
     assign: (member, channel) => conn.current?.send({ t: "assign", member, channel }),
+    calibrate: () => {
+      // Browsers only start audio from a click, so the context is made here.
+      audioContext.current ??= new AudioContext();
+      void audioContext.current.resume();
+      conn.current?.send({ t: "calibrate" });
+    },
   };
 }

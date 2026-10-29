@@ -45,3 +45,5 @@ jobs:
       - run: npm ci
       - name: Build (wasm + typecheck + bundle)
         run: npm run build
+      - name: Speaker calibration detector
+        run: node scripts/chirp-test.mjs

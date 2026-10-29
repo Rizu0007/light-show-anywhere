@@ -12,10 +12,8 @@
 // compares those moments with the frame timing of the track the phone received (the show after
 // the safety governor) and with each other.
 
-import { spawn } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { readFileSync } from "node:fs";
+import { chromeSession, sleep, until } from "./chrome.mjs";
 
 const [showPath, channelArg = "21", secondsArg = "10"] = process.argv.slice(2);
 if (!showPath) {
@@ -28,22 +26,9 @@ const PHONES = 2;
 const APP = process.env.APP ?? "http://localhost:5173";
 // The party certificate is self-signed; trust it for this test only.
 if (APP.startsWith("https:")) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
-const CHROME = process.env.CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-const DEBUG_PORT = 9333;
 const MAX_ERROR_MS = 40; // one 20 ms frame plus one 60 Hz screen refresh, with margin
 const MAX_PHONE_GAP_MS = 20;
 const DROP = !!process.env.DROP;
-
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-async function until(check, what, timeoutMs = 15000) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    const value = await check();
-    if (value) return value;
-    await sleep(100);
-  }
-  throw new Error(`timed out waiting for ${what}`);
-}
 
 // ------------------------------------------------------------------ expected timing from the file
 
@@ -70,65 +55,6 @@ function hostBot() {
     ws.onerror = () => reject(new Error("cannot reach the party server through the dev server (/ws)"));
   });
   return { ws, inbox, take, send, opened };
-}
-
-// ------------------------------------------------------------------ minimal Chrome DevTools client
-
-async function chromeSession() {
-  const profile = mkdtempSync(join(tmpdir(), "lsa-e2e-"));
-  const chrome = spawn(CHROME, [
-    "--headless=new",
-    `--remote-debugging-port=${DEBUG_PORT}`,
-    `--user-data-dir=${profile}`,
-    "--no-first-run",
-    "--ignore-certificate-errors",
-    "--disable-background-timer-throttling",
-    "--disable-renderer-backgrounding",
-    "--disable-backgrounding-occluded-windows",
-    "about:blank",
-  ], { stdio: "ignore" });
-  const version = await until(
-    () => fetch(`http://127.0.0.1:${DEBUG_PORT}/json/version`).then((r) => r.json()).catch(() => null),
-    "Chrome to start",
-  );
-  const ws = new WebSocket(version.webSocketDebuggerUrl);
-  await new Promise((r) => (ws.onopen = r));
-  let id = 0;
-  const pending = new Map();
-  ws.onmessage = (e) => {
-    const msg = JSON.parse(e.data);
-    if (msg.id && pending.has(msg.id)) {
-      const { resolve, reject } = pending.get(msg.id);
-      pending.delete(msg.id);
-      msg.error ? reject(new Error(msg.error.message)) : resolve(msg.result);
-    }
-  };
-  const call = (method, params = {}, sessionId) =>
-    new Promise((resolve, reject) => {
-      const msgId = ++id;
-      pending.set(msgId, { resolve, reject });
-      ws.send(JSON.stringify({ id: msgId, method, params, ...(sessionId ? { sessionId } : {}) }));
-    });
-  return {
-    async openPage(url) {
-      const { targetId } = await call("Target.createTarget", { url, newWindow: true });
-      const { sessionId } = await call("Target.attachToTarget", { targetId, flatten: true });
-      const evaluate = async (expression) =>
-        (await call("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true }, sessionId)).result.value;
-      return { evaluate };
-    },
-    async close() {
-      ws.close();
-      const exited = new Promise((r) => chrome.once("exit", r));
-      chrome.kill();
-      await Promise.race([exited, sleep(3000)]);
-      try {
-        rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
-      } catch {
-        // Leftover temp profile is harmless.
-      }
-    },
-  };
 }
 
 // ------------------------------------------------------------------ test

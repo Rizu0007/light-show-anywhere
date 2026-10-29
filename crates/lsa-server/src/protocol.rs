@@ -53,6 +53,14 @@ pub enum ClientMsg {
     /// Leave the room now (the host ends the party). A dropped connection instead keeps its
     /// place for a while so it can [`ClientMsg::Resume`].
     Leave,
+    /// Host: measure the speaker delay with phones' microphones (see
+    /// [`ServerMsg::Calibrate`]).
+    Calibrate,
+    /// Phone: how late the calibration tones arrived, or `None` if they were not heard.
+    Heard {
+        /// Milliseconds after the scheduled time.
+        delay_ms: Option<f64>,
+    },
     /// Host: give a phone a specific light (1-based channel), or `None` to clear it.
     Assign {
         /// Member id.
@@ -132,6 +140,24 @@ pub enum ServerMsg {
         t0: Option<f64>,
         /// Position when paused (or when the state was sent).
         position_ms: f64,
+    },
+    /// Speaker calibration: the host plays `tones` tone sweeps, the first at server time `at`
+    /// and then every `gap_ms`; phones with a microphone listen and answer with
+    /// [`ClientMsg::Heard`].
+    Calibrate {
+        /// Server time of the first tone.
+        at: f64,
+        /// Number of tones.
+        tones: u32,
+        /// Milliseconds between tones.
+        gap_ms: f64,
+    },
+    /// Host only: what one phone measured.
+    Heard {
+        /// Member id.
+        member: u64,
+        /// Milliseconds after the scheduled time, or `None` if not heard.
+        delay_ms: Option<f64>,
     },
     /// Host only: every phone in the room.
     Roster {

@@ -17,6 +17,8 @@ export type ServerMsg =
   | { t: "role"; channel: number | null; label: string | null; color: string | null }
   | { t: "playback"; playing: boolean; t0: number | null; positionMs: number }
   | { t: "roster"; members: { id: number; name: string | null; channel: number | null; online: boolean }[] }
+  | { t: "calibrate"; at: number; tones: number; gapMs: number }
+  | { t: "heard"; member: number; delayMs: number | null }
   | { t: "error"; message: string };
 
 /** A phone's light track (binary frame). */

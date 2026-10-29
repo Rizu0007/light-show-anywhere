@@ -3,6 +3,16 @@ import QRCode from "qrcode";
 import type { HostParty } from "./useHost";
 
 const ASSIGNABLE_LIGHTS = Array.from({ length: 30 }, (_, i) => i + 1);
+const MAX_SPEAKER_DELAY_MS = 600;
+
+/** Median of the phones' measurements, rounded to the slider's 10 ms steps. */
+function suggestedDelay(delays: number[]): number | null {
+  if (delays.length === 0) return null;
+  const sorted = [...delays].sort((a, b) => a - b);
+  const middle = sorted.length / 2;
+  const median = sorted.length % 2 ? sorted[Math.floor(middle)] : (sorted[middle - 1] + sorted[middle]) / 2;
+  return Math.min(MAX_SPEAKER_DELAY_MS, Math.max(0, Math.round(median / 10) * 10));
+}
 
 interface Props {
   party: HostParty;
@@ -16,6 +26,9 @@ export function HostPanel({ party, hasShow, nameOf, speakerDelayMs, onSpeakerDel
   const [qr, setQr] = useState<string | null>(null);
   const joinUrl = party.room ? `${location.origin}/join?room=${party.room}` : null;
   const isLocalhost = ["localhost", "127.0.0.1", "::1"].includes(location.hostname);
+  const heard = party.calibration?.heard ?? [];
+  const measured = heard.flatMap((h) => (h.delayMs === null ? [] : [h.delayMs]));
+  const suggestion = suggestedDelay(measured);
 
   useEffect(() => {
     if (!joinUrl) {
@@ -80,12 +93,35 @@ export function HostPanel({ party, hasShow, nameOf, speakerDelayMs, onSpeakerDel
             <input
               type="range"
               min={0}
-              max={500}
+              max={MAX_SPEAKER_DELAY_MS}
               step={10}
               value={speakerDelayMs}
               onChange={(e) => onSpeakerDelay(Number(e.target.value))}
             />
           </label>
+          <div className="calibrate">
+            <button
+              className="secondary"
+              onClick={party.calibrate}
+              disabled={!party.synced || party.playback.playing}
+              title="Plays five short tones through this computer's speaker"
+            >
+              Measure speaker delay
+            </button>
+            {suggestion !== null && suggestion !== speakerDelayMs && (
+              <button onClick={() => onSpeakerDelay(suggestion)}>Use {suggestion} ms</button>
+            )}
+          </div>
+          <p className="hint">
+            {!party.calibration
+              ? "Phones with “Help tune the sound” on listen to tones from the speaker you'll use for the song."
+              : heard.length === 0
+                ? "Playing tones… phones are listening."
+                : `${measured.length} of ${heard.length} listening phones heard the tones` +
+                  (measured.length > 0
+                    ? ` (${Math.round(Math.min(...measured))}–${Math.round(Math.max(...measured))} ms).`
+                    : ". Turn the speaker up and try again.")}
+          </p>
           <button className="secondary" onClick={party.stop}>
             End party
           </button>

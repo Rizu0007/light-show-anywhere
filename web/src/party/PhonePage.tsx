@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { listenForTones } from "./calibrate";
 import { ClockSync, startClockSync } from "./clock";
 import { connect, type Connection, type ServerMsg, type Track } from "./connection";
 
@@ -79,6 +80,9 @@ export function PhonePage() {
   const [reconnecting, setReconnecting] = useState(false);
   const [useTorch, setUseTorch] = useState(false);
   const [torchAvailable, setTorchAvailable] = useState<boolean | null>(null);
+  const [useMic, setUseMic] = useState(false);
+  const [listening, setListening] = useState(false);
+  const audioContext = useRef<AudioContext | null>(null);
 
   const screen = useRef<HTMLDivElement>(null);
   const connection = useRef<Connection | null>(null);
@@ -109,6 +113,19 @@ export function PhonePage() {
     void document.documentElement.requestFullscreen?.().catch(() => undefined);
     const release = await keepAwake();
     if (release) cleanup.current.push(release);
+    if (useMic) {
+      // Made during the tap (browsers only start audio from one); the permission is asked now so
+      // the measurement later does not wait on a prompt.
+      const ctx = new AudioContext();
+      audioContext.current = ctx;
+      cleanup.current.push(() => void ctx.close());
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((t) => t.stop());
+      } catch {
+        audioContext.current = null;
+      }
+    }
     if (useTorch) {
       torch.current = await openTorch();
       setTorchAvailable(!!torch.current);
@@ -152,6 +169,16 @@ export function PhonePage() {
             break;
           case "playback":
             playback.current = { playing: msg.playing, t0: msg.t0, positionMs: msg.positionMs };
+            break;
+          case "calibrate":
+            if (audioContext.current && clock.current?.ready) {
+              const sync = clock.current;
+              setListening(true);
+              void listenForTones(audioContext.current, () => sync.serverNow(), msg).then((delayMs) => {
+                setListening(false);
+                conn.send({ t: "heard", delayMs });
+              });
+            }
             break;
           case "error":
             setMessage(msg.message);
@@ -249,6 +276,10 @@ export function PhonePage() {
           <input type="checkbox" checked={useTorch} onChange={(e) => setUseTorch(e.target.checked)} />
           <span>Also use the flashlight (Android)</span>
         </label>
+        <label className="check">
+          <input type="checkbox" checked={useMic} onChange={(e) => setUseMic(e.target.checked)} />
+          <span>Help tune the sound (uses the microphone only while the host measures; nothing is recorded or sent)</span>
+        </label>
         <p className="safety">
           ⚠ This show contains flashing lights (limited to 3 flashes a second). If you are sensitive to flashing
           light, please do not join.
@@ -277,6 +308,7 @@ export function PhonePage() {
         <strong>{role.label ?? "Waiting for a light…"}</strong>
         <span>
           Room {room} · {reconnecting ? "reconnecting…" : synced ? "synced" : "syncing…"}
+          {listening && " · listening to the speaker…"}
           {torchAvailable === false && " · no flashlight"}
           {!window.isSecureContext && " · screen may sleep (not HTTPS)"}
         </span>

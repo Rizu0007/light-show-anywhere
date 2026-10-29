@@ -459,6 +459,48 @@ async fn phones_keep_their_lights_when_others_come_and_go() {
 }
 
 #[tokio::test]
+async fn speaker_calibration_reaches_phones_and_results_reach_the_host() {
+    let url = start_server().await;
+    let (mut host, room) = host_with_show(&url).await;
+    let mut phone = Client::connect(&url).await;
+    phone.send(json!({"t": "join", "room": room})).await;
+    let id = phone.expect("joined").await["id"].clone();
+    phone.expect("playback").await;
+
+    phone.send(json!({"t": "sync", "c0": 0})).await;
+    let now = phone.expect("sync").await["s1"].as_f64().unwrap();
+    host.send(json!({"t": "calibrate"})).await;
+    let request = phone.expect("calibrate").await;
+    assert!(request["at"].as_f64().unwrap() > now + 1000.0);
+    assert_eq!(request["tones"], 5);
+    assert_eq!(host.expect("calibrate").await, request);
+
+    phone.send(json!({"t": "heard", "delayMs": 182.5})).await;
+    let heard = host.expect("heard").await;
+    assert_eq!(heard["member"], id);
+    assert_eq!(heard["delayMs"], 182.5);
+    phone.send(json!({"t": "heard", "delayMs": null})).await;
+    assert_eq!(host.expect("heard").await["delayMs"], Value::Null);
+
+    // Only the host starts it, and not over the song.
+    phone.send(json!({"t": "calibrate"})).await;
+    assert!(
+        phone.expect("error").await["message"]
+            .as_str()
+            .unwrap()
+            .contains("host")
+    );
+    host.send(json!({"t": "play", "positionMs": 0})).await;
+    host.send(json!({"t": "calibrate"})).await;
+    assert!(
+        host.expect("error").await["message"]
+            .as_str()
+            .unwrap()
+            .contains("pause")
+    );
+}
+
+#[tokio::test]
 async fn cybertruck_phones_get_remapped_names_and_colours() {
     let url = start_server().await;
     let mut host = Client::connect(&url).await;

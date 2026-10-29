@@ -21,6 +21,13 @@ use crate::safety::govern;
 /// Delay between a play command and the show actually starting, so every phone receives it
 /// in time.
 pub const START_LEAD_MS: f64 = 1000.0;
+/// Delay between a calibration request and the first tone: time for phones to open their
+/// microphones.
+pub const CALIBRATION_LEAD_MS: f64 = 2500.0;
+/// Calibration tones per measurement (phones average them).
+pub const CALIBRATION_TONES: u32 = 5;
+/// Milliseconds between calibration tones; longer than any speaker delay worth measuring.
+pub const CALIBRATION_GAP_MS: f64 = 700.0;
 /// Largest show file accepted (bytes).
 pub const MAX_SHOW_BYTES: usize = 64 * 1024 * 1024;
 
@@ -385,6 +392,44 @@ impl Rooms {
             Playback::Paused { .. } => Playback::Paused { position_ms },
         };
         room.broadcast_playback();
+        Ok(())
+    }
+
+    /// Host: schedules calibration tones and tells every phone when to listen.
+    pub fn calibrate(&mut self, host: MemberId, now: f64) -> Result<(), String> {
+        let room = self.hosted_room(host)?;
+        if matches!(room.playback, Playback::Playing { .. }) {
+            return Err("pause the show before measuring the speaker".into());
+        }
+        let message = ServerMsg::Calibrate {
+            at: now + CALIBRATION_LEAD_MS,
+            tones: CALIBRATION_TONES,
+            gap_ms: CALIBRATION_GAP_MS,
+        };
+        send(&room.host_session.tx, message.clone());
+        for member in room.members.values() {
+            send(&member.session.tx, message.clone());
+        }
+        Ok(())
+    }
+
+    /// Phone: passes its calibration measurement to the host.
+    pub fn heard(&mut self, id: MemberId, delay_ms: Option<f64>) -> Result<(), String> {
+        let room = self
+            .membership
+            .get(&id)
+            .and_then(|code| self.by_code.get(code))
+            .ok_or("join a room first")?;
+        if !room.members.contains_key(&id) {
+            return Err("only phones measure the speaker".into());
+        }
+        send(
+            &room.host_session.tx,
+            ServerMsg::Heard {
+                member: id,
+                delay_ms: delay_ms.filter(|d| d.is_finite()),
+            },
+        );
         Ok(())
     }
 

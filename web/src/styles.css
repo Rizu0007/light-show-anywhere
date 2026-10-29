@@ -42,6 +42,12 @@ header h1 {
   color: var(--muted);
 }
 
+.calibrate {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
 .offline {
   color: var(--muted);
   font-style: normal;
