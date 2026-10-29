@@ -20,7 +20,7 @@ use std::net::SocketAddr;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
-use std::time::Instant;
+use std::time::{Duration, Instant};
 
 use axum::Router;
 use axum::extract::State;
@@ -34,25 +34,37 @@ use tower_http::services::{ServeDir, ServeFile};
 use crate::protocol::{ClientMsg, ServerMsg};
 use crate::room::{MAX_SHOW_BYTES, MemberId, Outgoing, Rooms};
 
+/// How long a dropped phone or host keeps its place: long enough for a phone to come back from
+/// a locked screen or a Wi-Fi switch.
+pub const RESUME_GRACE: Duration = Duration::from_secs(120);
+
 /// Shared server state.
 #[derive(Debug)]
 pub struct AppState {
     rooms: Mutex<Rooms>,
     started: Instant,
     next_id: AtomicU64,
+    resume_grace: Duration,
 }
 
 impl Default for AppState {
     fn default() -> Self {
-        Self {
-            rooms: Mutex::default(),
-            started: Instant::now(),
-            next_id: AtomicU64::new(1),
-        }
+        Self::with_resume_grace(RESUME_GRACE)
     }
 }
 
 impl AppState {
+    /// State whose dropped connections keep their place for `grace` (see [`RESUME_GRACE`]).
+    #[must_use]
+    pub fn with_resume_grace(grace: Duration) -> Self {
+        Self {
+            rooms: Mutex::default(),
+            started: Instant::now(),
+            next_id: AtomicU64::new(1),
+            resume_grace: grace,
+        }
+    }
+
     /// Server clock in milliseconds since start; the time base every client syncs to.
     #[must_use]
     pub fn now_ms(&self) -> f64 {
@@ -148,7 +160,8 @@ struct PendingLoad {
 }
 
 async fn connection(socket: WebSocket, state: Arc<AppState>) {
-    let id: MemberId = state.next_id.fetch_add(1, Ordering::Relaxed);
+    // Who this connection speaks for: itself, until it resumes an earlier place.
+    let mut id: MemberId = state.next_id.fetch_add(1, Ordering::Relaxed);
     let (mut sink, mut stream) = socket.split();
     let (tx, mut rx) = mpsc::unbounded_channel::<Outgoing>();
 
@@ -177,6 +190,20 @@ async fn connection(socket: WebSocket, state: Arc<AppState>) {
                 Ok(ClientMsg::Load { vehicle, name }) => {
                     pending = Some(PendingLoad { vehicle, name });
                 }
+                Ok(ClientMsg::Resume { token }) => {
+                    let mut rooms = state.rooms();
+                    match rooms.resume(&token, tx.clone()) {
+                        Some(resumed) => {
+                            if resumed != id {
+                                rooms.leave(id);
+                            }
+                            id = resumed;
+                        }
+                        None => {
+                            let _ = tx.send(Outgoing::Text(ServerMsg::Expired));
+                        }
+                    }
+                }
                 Ok(command) => handle(&state, id, &tx, command),
                 Err(err) => reply_error(&tx, format!("bad message: {err}")),
             },
@@ -197,9 +224,17 @@ async fn connection(socket: WebSocket, state: Arc<AppState>) {
         }
     }
 
-    state.rooms().leave(id);
-    drop(tx);
-    let _ = writer.await;
+    // Keep the place for a while in case the phone or host comes back. The room still holds a
+    // sender for this connection, so stop the writer rather than wait for it; messages sent to
+    // an offline place are then dropped.
+    let epoch = state.rooms().disconnect(id, &tx);
+    writer.abort();
+    // Close the socket now; the browser waits for that before it reconnects.
+    drop(stream);
+    if let Some(epoch) = epoch {
+        tokio::time::sleep(state.resume_grace).await;
+        state.rooms().expire(id, epoch);
+    }
 }
 
 fn handle(
@@ -223,7 +258,13 @@ fn handle(
         ClientMsg::Pause => state.rooms().pause(id, now),
         ClientMsg::Seek { position_ms } => state.rooms().seek(id, position_ms, now),
         ClientMsg::Assign { member, channel } => state.rooms().assign(id, member, channel),
-        ClientMsg::Load { .. } => unreachable!("handled by the connection loop"),
+        ClientMsg::Leave => {
+            state.rooms().leave(id);
+            Ok(())
+        }
+        ClientMsg::Load { .. } | ClientMsg::Resume { .. } => {
+            unreachable!("handled by the connection loop")
+        }
     };
     if let Err(message) = result {
         reply_error(tx, message);

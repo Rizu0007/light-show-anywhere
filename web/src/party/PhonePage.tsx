@@ -22,6 +22,27 @@ interface Playback {
   positionMs: number;
 }
 
+/** This tab's place in a room, kept across reloads so the phone gets its light back. */
+const SESSION_KEY = "lsa-phone-session";
+
+function savedToken(room: string): string | null {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? "null") as { room: string; token: string } | null;
+    return saved?.room === room ? saved.token : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveToken(room: string, token: string | null) {
+  try {
+    if (token) sessionStorage.setItem(SESSION_KEY, JSON.stringify({ room, token }));
+    else sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    // Private mode: the phone just joins as new after a reload.
+  }
+}
+
 /** Keeps the screen awake where supported (needs HTTPS on most phones). */
 async function keepAwake(): Promise<(() => void) | null> {
   try {
@@ -55,6 +76,7 @@ export function PhonePage() {
   const [role, setRole] = useState<Role>({ channel: null, label: null, color: null });
   const [message, setMessage] = useState<string | null>(null);
   const [synced, setSynced] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const [useTorch, setUseTorch] = useState(false);
   const [torchAvailable, setTorchAvailable] = useState<boolean | null>(null);
 
@@ -93,12 +115,13 @@ export function PhonePage() {
       if (torch.current) cleanup.current.push(() => torch.current?.stop());
     }
 
+    const code = room.trim();
+    let token = savedToken(code);
     const conn = connect({
+      // Every (re)connect takes back this phone's place, or joins as new.
       onOpen: () => {
-        const sync = new ClockSync((m) => conn.send(m));
-        clock.current = sync;
-        cleanup.current.push(startClockSync(sync));
-        conn.send({ t: "join", room: room.trim() });
+        setReconnecting(false);
+        conn.send(token ? { t: "resume", token } : { t: "join", room: code });
       },
       onMessage: (msg: ServerMsg) => {
         switch (msg.t) {
@@ -107,7 +130,20 @@ export function PhonePage() {
             setSynced(!!clock.current?.ready);
             break;
           case "joined":
+            token = msg.token;
+            saveToken(code, token);
             setStatus("joined");
+            break;
+          case "resumed":
+            setMessage(null);
+            setStatus("joined");
+            break;
+          case "expired":
+            // The place was given up (away too long, or the server restarted): join as new.
+            token = null;
+            saveToken(code, null);
+            clock.current?.reset();
+            conn.send({ t: "join", room: code });
             break;
           case "role":
             roleRef.current = { channel: msg.channel, label: msg.label, color: msg.color };
@@ -119,8 +155,11 @@ export function PhonePage() {
             break;
           case "error":
             setMessage(msg.message);
-            if (msg.message.includes("ended")) setStatus("ended");
-            else if (msg.message.includes("not found")) {
+            if (msg.message.includes("ended")) {
+              saveToken(code, null);
+              conn.close();
+              setStatus("ended");
+            } else if (msg.message.includes("not found")) {
               // Wrong code: close this connection and let the user try again.
               conn.close();
               joining.current = false;
@@ -136,10 +175,15 @@ export function PhonePage() {
         // Development: the governed track as received, read by scripts/party-e2e.mjs.
         if (import.meta.env.DEV) (window as unknown as { __lsaTrack: Track }).__lsaTrack = t;
       },
-      onClose: () => setStatus((s) => (s === "intro" ? s : "ended")),
+      // The light keeps playing from the track and schedule it has while this reconnects.
+      onClose: () => setReconnecting(true),
     });
     connection.current = conn;
     cleanup.current.push(() => conn.close());
+    // One clock for the whole session: the server's clock does not change across reconnects.
+    const sync = new ClockSync((m) => conn.send(m));
+    clock.current = sync;
+    cleanup.current.push(startClockSync(sync));
   }
 
   // Light loop: one level lookup per screen refresh.
@@ -232,7 +276,7 @@ export function PhonePage() {
       <div className="phone-label">
         <strong>{role.label ?? "Waiting for a light…"}</strong>
         <span>
-          Room {room} · {synced ? "synced" : "syncing…"}
+          Room {room} · {reconnecting ? "reconnecting…" : synced ? "synced" : "syncing…"}
           {torchAvailable === false && " · no flashlight"}
           {!window.isSecureContext && " · screen may sleep (not HTTPS)"}
         </span>

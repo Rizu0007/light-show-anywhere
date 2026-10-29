@@ -4,6 +4,8 @@
 // Needs `cargo run -p lsa-server` and `npm run dev` running. Usage:
 //   node scripts/party-e2e.mjs <show.fseq> [channel] [seconds]
 // Over HTTPS (`lsa-server --tls` and `npm run dev:https`): APP=https://localhost:5173 node ...
+// DROP=1 cuts phone 1's connection halfway through; it must reconnect, take its place back and
+// keep every light change in time.
 //
 // The host bot creates a room, uploads the show, pins every phone to the same light and plays.
 // Each phone records when its light crosses half brightness on the shared clock; the script
@@ -30,6 +32,7 @@ const CHROME = process.env.CHROME ?? "/Applications/Google Chrome.app/Contents/M
 const DEBUG_PORT = 9333;
 const MAX_ERROR_MS = 40; // one 20 ms frame plus one 60 Hz screen refresh, with margin
 const MAX_PHONE_GAP_MS = 20;
+const DROP = !!process.env.DROP;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function until(check, what, timeoutMs = 15000) {
@@ -166,7 +169,20 @@ try {
   host.send({ t: "play", positionMs: 0 });
   const playback = await host.take("playback", (m) => m.playing);
   const t0 = playback.t0;
-  await sleep(LISTEN_MS + 1500);
+  let reconnected = true;
+  if (DROP) {
+    await sleep(1000 + LISTEN_MS / 2);
+    await phones[0].evaluate("window.__lsaDrop()");
+    console.log(`cut phone 1's connection at ${LISTEN_MS / 2000} s`);
+    await sleep(LISTEN_MS / 2 + 500);
+    const opens = await phones[0].evaluate("window.__lsaOpens");
+    const back = host.inbox.filter((m) => m.t === "roster").pop();
+    const online = back?.members.length === PHONES && back.members.every((m) => m.online && m.channel === CHANNEL);
+    console.log(`phone 1 connected ${opens} times; host roster: ${online ? "both online on the same light" : JSON.stringify(back)}`);
+    reconnected = opens >= 2 && online;
+  } else {
+    await sleep(LISTEN_MS + 1500);
+  }
 
   // Expected changes within the listened window.
   // On/off per frame of the governed track phone 1 received (all phones play the same light).
@@ -192,7 +208,7 @@ try {
   }
 
   console.log(`\nexpected ${expected.length} light changes in ${LISTEN_MS / 1000} s`);
-  let ok = expected.length > 0;
+  let ok = expected.length > 0 && reconnected;
   for (const r of results) {
     const finite = r.errors.filter(Number.isFinite);
     const mean = finite.reduce((a, b) => a + b, 0) / Math.max(1, finite.length);

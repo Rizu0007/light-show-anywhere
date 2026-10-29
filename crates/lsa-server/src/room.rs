@@ -1,5 +1,9 @@
 //! Rooms: members, the loaded show, light assignment and playback.
 //!
+//! A dropped connection does not leave its room: the phone or host goes offline but keeps its
+//! place (and light) until [`Rooms::expire`], and can take it back with its session token
+//! ([`Rooms::resume`]). Phones keep playing while the host is offline.
+//!
 //! All methods are synchronous and send through each member's unbounded channel, so the lock
 //! around [`Rooms`] is never held across an `await`.
 
@@ -36,9 +40,46 @@ pub enum Outgoing {
 /// Unique id of a connection.
 pub type MemberId = u64;
 
+/// A connection's hold on its place in a room.
+#[derive(Debug)]
+struct Session {
+    tx: UnboundedSender<Outgoing>,
+    /// Secret that lets a new connection take this place.
+    token: String,
+    online: bool,
+    /// Counts disconnects, so an expiry scheduled for an earlier one is ignored.
+    epoch: u64,
+}
+
+impl Session {
+    fn new(tx: UnboundedSender<Outgoing>, token: String) -> Self {
+        Self {
+            tx,
+            token,
+            online: true,
+            epoch: 0,
+        }
+    }
+
+    /// Marks the session offline if `tx` is still its connection; returns the new epoch.
+    fn disconnect(&mut self, tx: &UnboundedSender<Outgoing>) -> Option<u64> {
+        if !self.online || !self.tx.same_channel(tx) {
+            return None;
+        }
+        self.online = false;
+        self.epoch += 1;
+        Some(self.epoch)
+    }
+
+    fn reconnect(&mut self, tx: UnboundedSender<Outgoing>) {
+        self.tx = tx;
+        self.online = true;
+    }
+}
+
 #[derive(Debug)]
 struct Member {
-    tx: UnboundedSender<Outgoing>,
+    session: Session,
     name: Option<String>,
     channel: Option<u16>,
     /// Chosen by the host; kept when a new show loads if still playable.
@@ -71,7 +112,7 @@ enum Playback {
 #[derive(Debug)]
 struct Room {
     host: MemberId,
-    host_tx: UnboundedSender<Outgoing>,
+    host_session: Session,
     /// Phones in join order.
     members: BTreeMap<MemberId, Member>,
     show: Option<LoadedShow>,
@@ -93,12 +134,19 @@ impl Rooms {
     pub fn create(&mut self, host: MemberId, tx: UnboundedSender<Outgoing>) -> String {
         self.leave(host);
         let code = self.new_code();
-        send(&tx, ServerMsg::Created { room: code.clone() });
+        let token = self.new_token();
+        send(
+            &tx,
+            ServerMsg::Created {
+                room: code.clone(),
+                token: token.clone(),
+            },
+        );
         self.by_code.insert(
             code.clone(),
             Room {
                 host,
-                host_tx: tx,
+                host_session: Session::new(tx, token),
                 members: BTreeMap::new(),
                 show: None,
                 playback: Playback::Paused { position_ms: 0.0 },
@@ -123,6 +171,7 @@ impl Rooms {
         }
         // Leaving first can close a room this connection was hosting, so look it up again.
         self.leave(id);
+        let token = self.new_token();
         let Some(room) = self.by_code.get_mut(&code) else {
             return Err(not_found());
         };
@@ -131,12 +180,13 @@ impl Rooms {
             ServerMsg::Joined {
                 id,
                 room: code.clone(),
+                token: token.clone(),
             },
         );
         room.members.insert(
             id,
             Member {
-                tx,
+                session: Session::new(tx, token),
                 name: name.map(|n| n.chars().take(32).collect()),
                 channel: None,
                 pinned: false,
@@ -144,14 +194,82 @@ impl Rooms {
         );
         self.membership.insert(id, code);
 
-        if let Some(show) = &room.show {
-            send(&room.members[&id].tx, show_msg(show));
-        }
         room.assign_unpinned();
-        room.send_role(id);
-        send(&room.members[&id].tx, room.playback_msg());
+        room.send_state(id);
         room.send_roster();
         Ok(())
+    }
+
+    /// Gives the place holding `token` to a new connection and sends it the room's state.
+    /// Returns the member id the connection now speaks for, or `None` if the token is unknown.
+    pub fn resume(&mut self, token: &str, tx: UnboundedSender<Outgoing>) -> Option<MemberId> {
+        let (code, room) = self.by_code.iter_mut().find(|(_, room)| {
+            room.host_session.token == token
+                || room.members.values().any(|m| m.session.token == token)
+        })?;
+        let host = room.host_session.token == token;
+        let id = if host {
+            room.host_session.reconnect(tx);
+            room.host
+        } else {
+            let (&id, member) = room
+                .members
+                .iter_mut()
+                .find(|(_, m)| m.session.token == token)?;
+            member.session.reconnect(tx);
+            id
+        };
+        let resumed = ServerMsg::Resumed {
+            id,
+            room: code.clone(),
+            host,
+        };
+        if host {
+            send(&room.host_session.tx, resumed);
+            if let Some(show) = &room.show {
+                send(&room.host_session.tx, show_msg(show));
+            }
+            send(&room.host_session.tx, room.playback_msg());
+        } else {
+            send(&room.members[&id].session.tx, resumed);
+            room.send_state(id);
+        }
+        room.send_roster();
+        Some(id)
+    }
+
+    /// Marks `id` offline after its connection `tx` dropped, keeping its place. Returns the
+    /// epoch to pass to [`Rooms::expire`], or `None` if `tx` no longer speaks for `id` (another
+    /// connection resumed it) or `id` is in no room.
+    pub fn disconnect(&mut self, id: MemberId, tx: &UnboundedSender<Outgoing>) -> Option<u64> {
+        let room = self.by_code.get_mut(self.membership.get(&id)?)?;
+        if room.host == id {
+            room.host_session.disconnect(tx)
+        } else {
+            let epoch = room.members.get_mut(&id)?.session.disconnect(tx)?;
+            room.send_roster();
+            Some(epoch)
+        }
+    }
+
+    /// Gives up the place of `id` if it is still offline since the disconnect that returned
+    /// `epoch`.
+    pub fn expire(&mut self, id: MemberId, epoch: u64) {
+        let Some(room) = self
+            .membership
+            .get(&id)
+            .and_then(|code| self.by_code.get(code))
+        else {
+            return;
+        };
+        let session = if room.host == id {
+            Some(&room.host_session)
+        } else {
+            room.members.get(&id).map(|m| &m.session)
+        };
+        if session.is_some_and(|s| !s.online && s.epoch == epoch) {
+            self.leave(id);
+        }
     }
 
     /// Removes a connection from its room. A room closes when its host leaves.
@@ -169,7 +287,7 @@ impl Rooms {
             for (member, phone) in room.members {
                 self.membership.remove(&member);
                 send(
-                    &phone.tx,
+                    &phone.session.tx,
                     ServerMsg::Error {
                         message: "the host ended the party".into(),
                     },
@@ -208,21 +326,18 @@ impl Rooms {
 
         room.playback = Playback::Paused { position_ms: 0.0 };
         let message = show_msg(&show);
-        room.show = Some(show);
-        send(&room.host_tx, message.clone());
+        send(&room.host_session.tx, message.clone());
         for member in room.members.values() {
-            send(&member.tx, message.clone());
+            send(&member.session.tx, message.clone());
         }
+        // Pins survive when the light is in the new show; every other phone is dealt again.
         for member in room.members.values_mut() {
-            if member.pinned
-                && !room
-                    .show
-                    .as_ref()
-                    .is_some_and(|s| member.channel.is_some_and(|c| s.playable.contains(&c)))
-            {
+            if !(member.pinned && member.channel.is_some_and(|c| show.playable.contains(&c))) {
                 member.pinned = false;
+                member.channel = None;
             }
         }
+        room.show = Some(show);
         room.assign_unpinned();
         let ids: Vec<MemberId> = room.members.keys().copied().collect();
         for id in ids {
@@ -292,6 +407,7 @@ impl Rooms {
         }
         phone.channel = channel;
         phone.pinned = channel.is_some();
+        // Only this phone changes; the others keep their lights.
         room.assign_unpinned();
         room.send_role(member);
         room.send_roster();
@@ -318,6 +434,14 @@ impl Rooms {
         } else {
             Err("only the host can do that".into())
         }
+    }
+
+    /// An unguessable session token: 128 bits from the randomly keyed hasher.
+    fn new_token(&mut self) -> String {
+        self.counter += 1;
+        let high = self.hasher.hash_one((self.counter, 0u8));
+        let low = self.hasher.hash_one((self.counter, 1u8));
+        format!("{high:016x}{low:016x}")
     }
 
     fn new_code(&mut self) -> String {
@@ -364,28 +488,44 @@ impl Room {
 
     fn broadcast_playback(&self) {
         let message = self.playback_msg();
-        send(&self.host_tx, message.clone());
+        send(&self.host_session.tx, message.clone());
         for member in self.members.values() {
-            send(&member.tx, message.clone());
+            send(&member.session.tx, message.clone());
         }
     }
 
-    /// Gives every unpinned phone a light: playable lights in priority order, repeating once
-    /// every light has a phone.
+    /// Gives every phone without a light the playable light with the fewest phones (ties go to
+    /// the higher-priority light). Phones that have a light keep it, so a phone joining or
+    /// leaving never moves the others.
     fn assign_unpinned(&mut self) {
         let Some(show) = &self.show else {
             return;
         };
-        if show.playable.is_empty() {
-            for member in self.members.values_mut().filter(|m| !m.pinned) {
-                member.channel = None;
+        let mut phones: HashMap<u16, usize> = show.playable.iter().map(|&c| (c, 0)).collect();
+        for member in self.members.values() {
+            if let Some(count) = member.channel.and_then(|c| phones.get_mut(&c)) {
+                *count += 1;
             }
+        }
+        for member in self.members.values_mut().filter(|m| m.channel.is_none()) {
+            let Some(&channel) = show.playable.iter().min_by_key(|c| phones[c]) else {
+                return;
+            };
+            member.channel = Some(channel);
+            *phones.entry(channel).or_default() += 1;
+        }
+    }
+
+    /// Sends a phone the show, its light and track, and the playback state.
+    fn send_state(&self, id: MemberId) {
+        let Some(member) = self.members.get(&id) else {
             return;
+        };
+        if let Some(show) = &self.show {
+            send(&member.session.tx, show_msg(show));
         }
-        let unpinned = self.members.values_mut().filter(|m| !m.pinned);
-        for (slot, member) in unpinned.enumerate() {
-            member.channel = Some(show.playable[slot % show.playable.len()]);
-        }
+        self.send_role(id);
+        send(&member.session.tx, self.playback_msg());
     }
 
     fn send_role(&self, id: MemberId) {
@@ -406,7 +546,7 @@ impl Room {
             _ => (0, None, None),
         };
         send(
-            &member.tx,
+            &member.session.tx,
             ServerMsg::Role {
                 channel: member.channel.filter(|_| channel_count > 0),
                 label,
@@ -417,7 +557,7 @@ impl Room {
             && let Some(levels) = show.rendered.channel_track(usize::from(number) - 1)
         {
             let step_ms = show.rendered.step_time().as_millis() as u8;
-            let _ = member.tx.send(Outgoing::Binary(encode_track(
+            let _ = member.session.tx.send(Outgoing::Binary(encode_track(
                 show.version,
                 number,
                 step_ms,
@@ -434,9 +574,10 @@ impl Room {
                 id,
                 name: m.name.clone(),
                 channel: m.channel,
+                online: m.session.online,
             })
             .collect();
-        send(&self.host_tx, ServerMsg::Roster { members });
+        send(&self.host_session.tx, ServerMsg::Roster { members });
     }
 }
 

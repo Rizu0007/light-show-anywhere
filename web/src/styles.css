@@ -42,6 +42,11 @@ header h1 {
   color: var(--muted);
 }
 
+.offline {
+  color: var(--muted);
+  font-style: normal;
+}
+
 .controls,
 .transport,
 .info,

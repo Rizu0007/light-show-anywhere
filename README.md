@@ -45,6 +45,11 @@ cargo run --release -p lsa-server -- --tls --static web/dist   # app + party ser
    light.
 4. Press **Play**. Use **Speaker delay** if sound arrives after the lights (Bluetooth speakers).
 
+Dropped connections are fine: a phone that loses Wi-Fi, locks its screen or reloads the page
+gets its light back when it returns, and keeps playing on its own meanwhile. If the host computer
+drops, phones keep playing and the host takes the room back when it reconnects. A place is kept
+for 2 minutes; **End party** closes the room at once.
+
 The certificate is reused, so phones are not warned again. It is renewed (and phones warn once
 more) when the computer joins a network it does not cover yet, or a month before it expires. With
 a real certificate for a domain, use `--cert cert.pem --key key.pem` instead of `--tls`.
@@ -65,6 +70,8 @@ End-to-end check with real headless-Chrome phones (needs both servers running):
 cd web && node scripts/party-e2e.mjs ../shows/<show>.fseq [channel] [seconds]
 # over HTTPS (lsa-server --tls, npm run dev:https):
 cd web && APP=https://localhost:5173 node scripts/party-e2e.mjs ../shows/<show>.fseq
+# cut phone 1's connection halfway; it must reconnect and keep time:
+cd web && DROP=1 node scripts/party-e2e.mjs ../shows/<show>.fseq
 ```
 
 ## Requirements

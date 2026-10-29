@@ -6,6 +6,8 @@ export interface RosterMember {
   id: number;
   name: string | null;
   channel: number | null;
+  /** False while the phone is away (it keeps its light for a couple of minutes). */
+  online: boolean;
 }
 
 export interface PartyPlayback {
@@ -50,18 +52,27 @@ export function useHost(): HostParty {
   const clock = useRef<ClockSync | null>(null);
   const stopSync = useRef<(() => void) | null>(null);
   const playbackRef = useRef(playback);
-  // A show loaded before the room existed is uploaded once the room is created.
+  // The latest show; uploaded when the room is created, and again after a reconnect if it was
+  // loaded while offline.
   const pendingLoad = useRef<{ bytes: Uint8Array<ArrayBuffer>; vehicle: string; name: string } | null>(null);
+  const needsUpload = useRef(false);
+  // Lets a dropped connection take the room back (see lsa-server's resume).
+  const token = useRef<string | null>(null);
 
-  const upload = useCallback((bytes: Uint8Array<ArrayBuffer>, vehicle: string, name: string) => {
-    conn.current?.send({ t: "load", vehicle, name });
-    conn.current?.sendBinary(bytes);
+  const upload = useCallback(() => {
+    const show = pendingLoad.current;
+    if (!show || !conn.current) return;
+    const sent = conn.current.send({ t: "load", vehicle: show.vehicle, name: show.name });
+    needsUpload.current = !(sent && conn.current.sendBinary(show.bytes));
   }, []);
 
   const stop = useCallback(() => {
     stopSync.current?.();
     stopSync.current = null;
+    // Ends the party for every phone now, instead of after the server's grace period.
+    conn.current?.send({ t: "leave" });
     conn.current?.close();
+    token.current = null;
     conn.current = null;
     clock.current = null;
     setActive(false);
@@ -78,10 +89,7 @@ export function useHost(): HostParty {
     const connection = connect({
       onOpen: () => {
         setConnected(true);
-        const sync = new ClockSync((m) => connection.send(m));
-        clock.current = sync;
-        stopSync.current = startClockSync(sync);
-        connection.send({ t: "create" });
+        connection.send(token.current ? { t: "resume", token: token.current } : { t: "create" });
       },
       onMessage: (msg: ServerMsg) => {
         switch (msg.t) {
@@ -90,11 +98,20 @@ export function useHost(): HostParty {
             setSynced(!!clock.current?.ready);
             break;
           case "created":
+            token.current = msg.token;
             setRoom(msg.room);
-            if (pendingLoad.current) {
-              const { bytes, vehicle, name } = pendingLoad.current;
-              upload(bytes, vehicle, name);
-            }
+            setError(null);
+            upload();
+            break;
+          case "resumed":
+            setRoom(msg.room);
+            setError(null);
+            if (needsUpload.current) upload();
+            break;
+          case "expired":
+            // Offline for longer than the server keeps a room.
+            stop();
+            setError("The party ended while this computer was offline. Start a new one.");
             break;
           case "playback": {
             const next = { playing: msg.playing, t0: msg.t0, positionMs: msg.positionMs };
@@ -112,21 +129,23 @@ export function useHost(): HostParty {
             break;
         }
       },
-      onClose: () => {
-        setConnected(false);
-        conn.current = null;
-        setError((e) => e ?? "Disconnected from the party server.");
-      },
+      // Reconnects by itself; phones keep playing meanwhile.
+      onClose: () => setConnected(false),
     });
     conn.current = connection;
-  }, [upload]);
+    // One clock for the whole party: the server's clock does not change across reconnects.
+    const sync = new ClockSync((m) => connection.send(m));
+    clock.current = sync;
+    stopSync.current = startClockSync(sync);
+  }, [upload, stop]);
 
   useEffect(() => stop, [stop]);
 
   const load = useCallback(
     (bytes: Uint8Array<ArrayBuffer>, vehicle: string, name: string) => {
       pendingLoad.current = { bytes, vehicle, name };
-      if (room) upload(bytes, vehicle, name);
+      needsUpload.current = true;
+      if (room) upload();
     },
     [room, upload],
   );

@@ -16,13 +16,15 @@ use tokio_tungstenite::{MaybeTlsStream, WebSocketStream, connect_async};
 
 const TIMEOUT: Duration = Duration::from_secs(5);
 
+/// How long dropped connections keep their place in these tests.
+const GRACE: Duration = Duration::from_millis(300);
+
 async fn start_server() -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
+    let state = Arc::new(AppState::with_resume_grace(GRACE));
     tokio::spawn(async move {
-        axum::serve(listener, app(Arc::new(AppState::default()), None))
-            .await
-            .unwrap();
+        axum::serve(listener, app(state, None)).await.unwrap();
     });
     format!("ws://{addr}/ws")
 }
@@ -64,6 +66,17 @@ impl Client {
                 if value["t"] == t {
                     return value;
                 }
+            }
+        }
+    }
+
+    /// Next roster whose phones match `check`.
+    async fn roster_where(&mut self, check: impl Fn(&[Value]) -> bool) -> Vec<Value> {
+        loop {
+            let roster = self.expect("roster").await;
+            let members = roster["members"].as_array().unwrap();
+            if check(members) {
+                return members.clone();
             }
         }
     }
@@ -294,16 +307,155 @@ async fn bad_uploads_are_rejected() {
 }
 
 #[tokio::test]
-async fn phones_are_told_when_the_host_leaves() {
+async fn phones_are_told_when_the_host_ends_the_party() {
+    let url = start_server().await;
+    let (mut host, room) = host_with_show(&url).await;
+    let mut phone = Client::connect(&url).await;
+    phone.send(json!({"t": "join", "room": room})).await;
+    phone.expect("playback").await;
+
+    host.send(json!({"t": "leave"})).await;
+    let error = phone.expect("error").await;
+    assert!(error["message"].as_str().unwrap().contains("ended"));
+}
+
+#[tokio::test]
+async fn party_ends_when_a_dropped_host_does_not_come_back() {
     let url = start_server().await;
     let (host, room) = host_with_show(&url).await;
     let mut phone = Client::connect(&url).await;
     phone.send(json!({"t": "join", "room": room})).await;
     phone.expect("playback").await;
 
+    let dropped = std::time::Instant::now();
     drop(host);
     let error = phone.expect("error").await;
     assert!(error["message"].as_str().unwrap().contains("ended"));
+    assert!(dropped.elapsed() >= GRACE);
+}
+
+#[tokio::test]
+async fn dropped_phone_resumes_its_light() {
+    let url = start_server().await;
+    let (mut host, room) = host_with_show(&url).await;
+    let mut phone = Client::connect(&url).await;
+    phone.send(json!({"t": "join", "room": room})).await;
+    let joined = phone.expect("joined").await;
+    let (id, token) = (joined["id"].clone(), joined["token"].clone());
+    assert_eq!(token.as_str().unwrap().len(), 32);
+    assert_eq!(phone.expect("role").await["channel"], 1);
+    let mut other = Client::connect(&url).await;
+    other.send(json!({"t": "join", "room": room})).await;
+    other.expect("role").await;
+
+    drop(phone);
+    let offline = host
+        .roster_where(|m| m.len() == 2 && m[0]["online"] == false)
+        .await;
+    assert_eq!(offline[0]["channel"], 1);
+
+    // A phone joining while it is away does not take its light.
+    let mut newcomer = Client::connect(&url).await;
+    newcomer.send(json!({"t": "join", "room": room})).await;
+    assert_ne!(newcomer.expect("role").await["channel"], 1);
+
+    let mut back = Client::connect(&url).await;
+    back.send(json!({"t": "resume", "token": token})).await;
+    let resumed = back.expect("resumed").await;
+    assert_eq!(resumed["id"], id);
+    assert_eq!(resumed["host"], false);
+    back.expect("show").await;
+    assert_eq!(back.expect("role").await["channel"], 1);
+    assert_eq!(
+        u16::from_le_bytes(back.expect_binary().await[8..10].try_into().unwrap()),
+        1
+    );
+    back.expect("playback").await;
+    host.roster_where(|m| m.len() == 3 && m.iter().all(|p| p["online"] == true))
+        .await;
+
+    // It plays along with the room again.
+    host.send(json!({"t": "play", "positionMs": 0})).await;
+    assert_eq!(back.expect("playback").await["playing"], true);
+}
+
+#[tokio::test]
+async fn dropped_host_resumes_control() {
+    let url = start_server().await;
+    let mut host = Client::connect(&url).await;
+    host.send(json!({"t": "create"})).await;
+    let created = host.expect("created").await;
+    let (room, token) = (created["room"].clone(), created["token"].clone());
+    host.send(json!({"t": "load", "vehicle": "model-3y", "name": "Test"}))
+        .await;
+    host.send_binary(test_show()).await;
+    host.expect("show").await;
+    let mut phone = Client::connect(&url).await;
+    phone.send(json!({"t": "join", "room": room})).await;
+    phone.expect("playback").await;
+
+    drop(host);
+    let mut back = Client::connect(&url).await;
+    back.send(json!({"t": "resume", "token": token})).await;
+    let resumed = back.expect("resumed").await;
+    assert_eq!(resumed["host"], true);
+    assert_eq!(back.expect("show").await["name"], "Test");
+    back.expect("playback").await;
+    back.expect("roster").await;
+    back.send(json!({"t": "play", "positionMs": 0})).await;
+    assert_eq!(back.expect("playback").await["playing"], true);
+    // The phone stayed in the room and follows the resumed host.
+    assert_eq!(phone.expect("playback").await["playing"], true);
+}
+
+#[tokio::test]
+async fn expired_places_are_given_up() {
+    let url = start_server().await;
+    let (mut host, room) = host_with_show(&url).await;
+    let mut phone = Client::connect(&url).await;
+    phone.send(json!({"t": "join", "room": room})).await;
+    let token = phone.expect("joined").await["token"].clone();
+    phone.expect("playback").await;
+
+    drop(phone);
+    host.roster_where(|m| m.len() == 1 && m[0]["online"] == false)
+        .await;
+    host.roster_where(<[Value]>::is_empty).await;
+
+    let mut late = Client::connect(&url).await;
+    late.send(json!({"t": "resume", "token": token})).await;
+    late.expect("expired").await;
+    late.send(json!({"t": "resume", "token": "not-a-token"}))
+        .await;
+    late.expect("expired").await;
+}
+
+#[tokio::test]
+async fn phones_keep_their_lights_when_others_come_and_go() {
+    let url = start_server().await;
+    let (mut host, room) = host_with_show(&url).await;
+    let mut phones = Vec::new();
+    for _ in 0..3 {
+        let mut phone = Client::connect(&url).await;
+        phone.send(json!({"t": "join", "room": room})).await;
+        phone.expect("role").await;
+        phones.push(phone);
+    }
+    let before = host.roster_where(|m| m.len() == 3).await;
+
+    // The middle phone leaves for good; the others keep their lights.
+    phones.remove(1).send(json!({"t": "leave"})).await;
+    let after = host.roster_where(|m| m.len() == 2).await;
+    assert_eq!(after[0], before[0]);
+    assert_eq!(after[1], before[2]);
+
+    // A new phone takes the free light.
+    let mut newcomer = Client::connect(&url).await;
+    newcomer.send(json!({"t": "join", "room": room})).await;
+    assert_eq!(
+        newcomer.expect("role").await["channel"],
+        before[1]["channel"]
+    );
 }
 
 #[tokio::test]

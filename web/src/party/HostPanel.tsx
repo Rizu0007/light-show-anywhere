@@ -54,7 +54,13 @@ export function HostPanel({ party, hasShow, nameOf, speakerDelayMs, onSpeakerDel
           </h2>
           {joinUrl && <code className="join-url">{joinUrl}</code>}
           <p className="hint">
-            {party.connected ? (party.synced ? "Connected · clock synced" : "Connected · syncing clock…") : "Connecting…"}
+            {party.connected
+              ? party.synced
+                ? "Connected · clock synced"
+                : "Connected · syncing clock…"
+              : party.room
+                ? "Reconnecting… phones keep playing"
+                : "Connecting…"}
           </p>
           {isLocalhost && (
             <p className="warn">
@@ -92,7 +98,10 @@ export function HostPanel({ party, hasShow, nameOf, speakerDelayMs, onSpeakerDel
         <ul>
           {party.roster.map((member, i) => (
             <li key={member.id}>
-              <span>{member.name ?? `Phone ${i + 1}`}</span>
+              <span>
+                {member.name ?? `Phone ${i + 1}`}
+                {!member.online && <em className="offline"> · offline</em>}
+              </span>
               <select
                 value={member.channel ?? ""}
                 onChange={(e) => party.assign(member.id, e.target.value ? Number(e.target.value) : null)}

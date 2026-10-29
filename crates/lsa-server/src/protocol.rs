@@ -44,6 +44,15 @@ pub enum ClientMsg {
         /// New show position.
         position_ms: f64,
     },
+    /// Take back a place after a dropped connection, using the token from
+    /// [`ServerMsg::Created`] or [`ServerMsg::Joined`].
+    Resume {
+        /// Session token.
+        token: String,
+    },
+    /// Leave the room now (the host ends the party). A dropped connection instead keeps its
+    /// place for a while so it can [`ClientMsg::Resume`].
+    Leave,
     /// Host: give a phone a specific light (1-based channel), or `None` to clear it.
     Assign {
         /// Member id.
@@ -68,6 +77,8 @@ pub enum ServerMsg {
     Created {
         /// Room code to share.
         room: String,
+        /// Secret for [`ClientMsg::Resume`].
+        token: String,
     },
     /// Joined a room.
     Joined {
@@ -75,7 +86,20 @@ pub enum ServerMsg {
         id: u64,
         /// Room code.
         room: String,
+        /// Secret for [`ClientMsg::Resume`].
+        token: String,
     },
+    /// Back in the room after [`ClientMsg::Resume`]; the room's state follows.
+    Resumed {
+        /// This member's id.
+        id: u64,
+        /// Room code.
+        room: String,
+        /// Whether this connection is the host.
+        host: bool,
+    },
+    /// The token is unknown: the place was given up or the room closed. Join or create again.
+    Expired,
     /// The room's current show.
     Show {
         /// Increases every time a new show is loaded.
@@ -131,6 +155,8 @@ pub struct RosterEntry {
     pub name: Option<String>,
     /// Assigned 1-based channel.
     pub channel: Option<u16>,
+    /// Whether the phone is connected (offline phones keep their light for a while).
+    pub online: bool,
 }
 
 /// Magic bytes at the start of a light-track frame.
