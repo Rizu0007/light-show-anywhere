@@ -16,10 +16,31 @@ export type ServerMsg =
     }
   | { t: "role"; channel: number | null; label: string | null; color: string | null }
   | { t: "playback"; playing: boolean; t0: number | null; positionMs: number }
-  | { t: "roster"; members: { id: number; name: string | null; channel: number | null; online: boolean }[] }
+  | {
+      t: "roster";
+      members: {
+        id: number;
+        name: string | null;
+        channel: number | null;
+        online: boolean;
+        health: PhoneHealth | null;
+      }[];
+    }
   | { t: "calibrate"; at: number; tones: number; gapMs: number }
   | { t: "heard"; member: number; delayMs: number | null }
   | { t: "error"; message: string };
+
+/** What a phone reports about itself (lsa-server's `PhoneHealth`). */
+export interface PhoneHealth {
+  synced: boolean;
+  rttMs: number | null;
+  /** Screen kept awake; `null` where the browser cannot. */
+  awake: boolean | null;
+  /** Flashlight works; `null` when not asked for. */
+  torch: boolean | null;
+  secure: boolean;
+  reconnects: number;
+}
 
 /** A phone's light track (binary frame). */
 export interface Track {
@@ -67,16 +88,12 @@ const RETRY_MAX_MS = 5000;
 /** Clock sync replies arrive every 2 s; this long without any message means the link is dead. */
 const SILENT_MS = 7000;
 
-/** A random 50–150% of `ms`. When the Wi-Fi drops, a whole crowd loses the server together; at
- *  fixed delays they would all reconnect in the same instant, and connections beyond the
- *  server's queue (128 on macOS) wait seconds for TCP to retry (lsa-server's load test). */
+/** A random 50–150% of `ms`, so a crowd that lost Wi-Fi together does not reconnect at once. */
 const jittered = (ms: number) => ms * (0.5 + Math.random());
 
 /**
- * Opens the party connection and keeps it open: after a drop it reconnects with backoff, and at
- * once when the page becomes visible again or the device comes back online (phones drop
- * sockets while the screen is locked). `onOpen` runs on every (re)connect, `onClose` on every
- * drop.
+ * Opens the party connection and keeps it open: reconnects with jittered backoff, at once when the
+ * page becomes visible again. `onOpen` runs on every (re)connect, `onClose` on every drop.
  */
 export function connect(handlers: {
   onOpen: () => void;

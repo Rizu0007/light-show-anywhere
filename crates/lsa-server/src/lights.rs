@@ -40,18 +40,6 @@ const PRIORITY: [Light; 30] = {
     ]
 };
 
-/// Parses the vehicle names used by the web app.
-#[must_use]
-pub fn parse_vehicle(name: &str) -> Option<Vehicle> {
-    match name {
-        "model-s" => Some(Vehicle::ModelS),
-        "model-x" => Some(Vehicle::ModelX),
-        "model-3y" => Some(Vehicle::Model3Y),
-        "cybertruck" => Some(Vehicle::Cybertruck),
-        _ => None,
-    }
-}
-
 /// 1-based channels to hand out for this show: lights the vehicle has and the show uses.
 #[must_use]
 pub fn playable_channels(rendered: &Rendered) -> Vec<u16> {

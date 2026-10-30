@@ -1,10 +1,5 @@
 #!/usr/bin/env bash
-# Downloads Tesla's official example show 1 into shows/ (git-ignored; Tesla's files are not
-# redistributed here). Tests that use it skip without it, or fail when LSA_REQUIRE_SHOWS is set,
-# as in CI.
-#
-# Pinned to one commit of https://github.com/teslamotors/light-show and checked by hash, so the
-# tests always run against the same file.
+# Downloads Tesla's example show 1 into git-ignored shows/, pinned to a commit and hash-checked.
 set -euo pipefail
 
 COMMIT=9f949512146d881b6eb66d042b22ee3f9e115afb

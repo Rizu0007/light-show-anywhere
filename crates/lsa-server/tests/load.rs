@@ -1,13 +1,5 @@
-//! Load test: one host and many phones in a room, over real `WebSocket` connections.
-//!
-//! Phases: phones join all at once (with clock sync), the host presses play, and every phone
-//! drops and resumes at the same moment (a Wi-Fi blip). Each phase checks what a party needs:
-//! the play command reaches every phone well inside the start lead, clock-sync round trips stay
-//! short, and every phone gets its light back.
-//!
-//! `cargo test -p lsa-server --test load -- --nocapture` runs 200 phones and prints the
-//! timings. For a bigger crowd: `LSA_LOAD_PHONES=1000 cargo test --release -p lsa-server --test
-//! load -- --nocapture`.
+//! Load test over real `WebSocket` connections: phones join at once, play, next song, Wi-Fi blip.
+//! `LSA_LOAD_PHONES=2000 cargo test --release -p lsa-server --test load -- --nocapture`.
 
 use std::hash::{BuildHasher, RandomState};
 use std::sync::Arc;

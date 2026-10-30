@@ -1,16 +1,7 @@
 #!/usr/bin/env node
-// End-to-end party test: a scripted host plus real headless-Chrome phones.
-//
-// Needs `cargo run -p lsa-server` and `npm run dev` running. Usage:
+// Party test: a host bot and headless-Chrome phones on one light; checks each light change against
+// the track's frame times. Needs lsa-server and `npm run dev`. DROP=1 cuts phone 1 mid-show.
 //   node scripts/party-e2e.mjs <show.fseq> [channel] [seconds]
-// Over HTTPS (`lsa-server --tls` and `npm run dev:https`): APP=https://localhost:5173 node ...
-// DROP=1 cuts phone 1's connection halfway through; it must reconnect, take its place back and
-// keep every light change in time.
-//
-// The host bot creates a room, uploads the show, pins every phone to the same light and plays.
-// Each phone records when its light crosses half brightness on the shared clock; the script
-// compares those moments with the frame timing of the track the phone received (the show after
-// the safety governor) and with each other.
 
 import { readFileSync } from "node:fs";
 import { chromeSession, sleep, until } from "./chrome.mjs";
@@ -92,6 +83,16 @@ try {
   const label = await phones[0].evaluate(`document.querySelector(".phone-label strong")?.textContent`);
   console.log(`${PHONES} phones joined and synced, all playing channel ${CHANNEL} (${label})`);
 
+  // Each phone reports its health to the host's roster.
+  // Browsers count localhost as secure even over http.
+  const secure = APP.startsWith("https:") || new URL(APP).hostname === "localhost";
+  const reported = await until(() => {
+    const latest = host.inbox.filter((m) => m.t === "roster").pop();
+    const ok = latest?.members.every((m) => m.health?.synced && m.health.secure === secure);
+    return ok ? latest : null;
+  }, "phone status in the host's roster");
+  for (const [i, m] of reported.members.entries()) console.log(`phone ${i + 1} reports ${JSON.stringify(m.health)}`);
+
   host.send({ t: "play", positionMs: 0 });
   const playback = await host.take("playback", (m) => m.playing);
   const t0 = playback.t0;
@@ -104,8 +105,12 @@ try {
     const opens = await phones[0].evaluate("window.__lsaOpens");
     const back = host.inbox.filter((m) => m.t === "roster").pop();
     const online = back?.members.length === PHONES && back.members.every((m) => m.online && m.channel === CHANNEL);
-    console.log(`phone 1 connected ${opens} times; host roster: ${online ? "both online on the same light" : JSON.stringify(back)}`);
-    reconnected = opens >= 2 && online;
+    const counted = back?.members[0].health?.reconnects >= 1;
+    console.log(
+      `phone 1 connected ${opens} times; host roster: ${online ? "both online on the same light" : JSON.stringify(back)}` +
+        `, phone 1 reports ${back?.members[0].health?.reconnects ?? "no"} reconnect(s)`,
+    );
+    reconnected = opens >= 2 && online && counted;
   } else {
     await sleep(LISTEN_MS + 1500);
   }

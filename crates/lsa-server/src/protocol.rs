@@ -68,6 +68,30 @@ pub enum ClientMsg {
         /// 1-based Tesla channel number.
         channel: Option<u16>,
     },
+    /// Phone: how it is doing, shown to the host in the roster. Sent when it changes.
+    Status(PhoneHealth),
+}
+
+/// What a phone reports about itself, so the host can spot phones that will not play well.
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PhoneHealth {
+    /// The phone's clock is synced to the server's.
+    pub synced: bool,
+    /// Best clock-sync round trip in milliseconds, if any.
+    #[serde(default)]
+    pub rtt_ms: Option<f64>,
+    /// The screen is kept awake; `None` where the browser cannot.
+    #[serde(default)]
+    pub awake: Option<bool>,
+    /// The flashlight works; `None` when the guest did not ask for it.
+    #[serde(default)]
+    pub torch: Option<bool>,
+    /// The page is on HTTPS (needed to keep the screen awake and use the flashlight).
+    pub secure: bool,
+    /// Times the connection dropped and came back.
+    #[serde(default)]
+    pub reconnects: u32,
 }
 
 /// Messages to browsers.
@@ -172,7 +196,7 @@ pub enum ServerMsg {
 }
 
 /// One phone in the roster.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct RosterEntry {
     /// Member id.
@@ -183,6 +207,8 @@ pub struct RosterEntry {
     pub channel: Option<u16>,
     /// Whether the phone is connected (offline phones keep their light for a while).
     pub online: bool,
+    /// The phone's last [`ClientMsg::Status`], if it sent one.
+    pub health: Option<PhoneHealth>,
 }
 
 /// Magic bytes at the start of a light-track frame.

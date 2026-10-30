@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { playTones } from "./calibrate";
 import { ClockSync, startClockSync } from "./clock";
-import { connect, type Connection, type ServerMsg } from "./connection";
+import { connect, type Connection, type PhoneHealth, type ServerMsg } from "./connection";
 
 export interface RosterMember {
   id: number;
@@ -9,6 +9,8 @@ export interface RosterMember {
   channel: number | null;
   /** False while the phone is away (it keeps its light for a couple of minutes). */
   online: boolean;
+  /** The phone's last report, if any. */
+  health: PhoneHealth | null;
 }
 
 export interface PartyPlayback {

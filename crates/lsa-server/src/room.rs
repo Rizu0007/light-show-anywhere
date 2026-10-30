@@ -1,11 +1,6 @@
-//! Rooms: members, the loaded show, light assignment and playback.
-//!
-//! A dropped connection does not leave its room: the phone or host goes offline but keeps its
-//! place (and light) until [`Rooms::expire`], and can take it back with its session token
-//! ([`Rooms::resume`]). Phones keep playing while the host is offline.
-//!
-//! All methods are synchronous and send through each member's unbounded channel, so the lock
-//! around [`Rooms`] is never held across an `await`.
+//! Rooms: members, the loaded show, light assignment and playback. A dropped connection keeps
+//! its place until [`Rooms::expire`] and can [`Rooms::resume`] it. Methods are synchronous, so
+//! the lock around [`Rooms`] is never held across an `await`.
 
 use std::collections::{BTreeMap, HashMap};
 use std::hash::{BuildHasher, RandomState};
@@ -14,8 +9,8 @@ use lsa_fseq::Sequence;
 use lsa_tesla::{Channel, Rendered, Vehicle, render};
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::lights::{color_of, parse_vehicle, playable_channels};
-use crate::protocol::{RosterEntry, ServerMsg, encode_track};
+use crate::lights::{color_of, playable_channels};
+use crate::protocol::{PhoneHealth, RosterEntry, ServerMsg, encode_track};
 use crate::safety::govern;
 
 /// Delay between a play command and the show actually starting, so every phone receives it
@@ -30,6 +25,9 @@ pub const CALIBRATION_TONES: u32 = 5;
 pub const CALIBRATION_GAP_MS: f64 = 700.0;
 /// Largest show file accepted (bytes).
 pub const MAX_SHOW_BYTES: usize = 64 * 1024 * 1024;
+/// Largest decoded show accepted (bytes). Tesla's limit, 200 channels for 4 hours at 15 ms per
+/// frame, is 192 MB; a compressed file can claim far more.
+pub const MAX_DECODED_BYTES: usize = 256 * 1024 * 1024;
 
 const ROOM_CODE_LEN: usize = 4;
 // No I, O, 0 or 1: codes are read aloud and typed on phones.
@@ -91,6 +89,8 @@ struct Member {
     channel: Option<u16>,
     /// Chosen by the host; kept when a new show loads if still playable.
     pinned: bool,
+    /// Last report from the phone.
+    health: Option<PhoneHealth>,
 }
 
 #[derive(Debug)]
@@ -101,6 +101,54 @@ struct LoadedShow {
     rendered: Rendered,
     playable: Vec<u16>,
     duration_ms: f64,
+    /// Governed, encoded track of each playable light, made once instead of per phone.
+    tracks: HashMap<u16, Vec<u8>>,
+}
+
+impl LoadedShow {
+    fn new(version: u32, name: &str, vehicle: &str, rendered: Rendered, duration_ms: f64) -> Self {
+        let playable = playable_channels(&rendered);
+        let mut show = Self {
+            version,
+            name: name.chars().take(80).collect(),
+            vehicle: vehicle.to_owned(),
+            rendered,
+            playable,
+            duration_ms,
+            tracks: HashMap::new(),
+        };
+        show.tracks = show
+            .playable
+            .iter()
+            .filter_map(|&number| Some((number, show.encode_track(number)?)))
+            .collect();
+        show
+    }
+
+    fn step_ms(&self) -> u8 {
+        self.rendered.step_time().as_millis() as u8
+    }
+
+    /// The binary frame a phone playing light `number` receives.
+    fn track(&self, number: u16) -> Option<Vec<u8>> {
+        self.tracks
+            .get(&number)
+            .cloned()
+            .or_else(|| self.encode_track(number))
+    }
+
+    fn encode_track(&self, number: u16) -> Option<Vec<u8>> {
+        let levels = self
+            .rendered
+            .channel_track(usize::from(number).checked_sub(1)?)?;
+        let step_ms = self.step_ms();
+        Some(encode_track(
+            self.version,
+            number,
+            step_ms,
+            &govern(&levels, step_ms),
+        ))
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -200,6 +248,7 @@ impl Rooms {
                 name: name.map(|n| n.chars().take(32).collect()),
                 channel: None,
                 pinned: false,
+                health: None,
             },
         );
         self.membership.insert(id, code);
@@ -317,22 +366,24 @@ impl Rooms {
         bytes: &[u8],
     ) -> Result<(), String> {
         let room = self.hosted_room(host)?;
-        let vehicle: Vehicle =
-            parse_vehicle(vehicle_name).ok_or_else(|| format!("unknown vehicle {vehicle_name}"))?;
+        let vehicle: Vehicle = Vehicle::from_id(vehicle_name)
+            .ok_or_else(|| format!("unknown vehicle {vehicle_name}"))?;
         if bytes.len() > MAX_SHOW_BYTES {
             return Err("show file is too large".into());
         }
+        let header = lsa_fseq::Header::parse(bytes).map_err(|e| e.to_string())?;
+        if header.data_len().map_err(|e| e.to_string())? > MAX_DECODED_BYTES {
+            return Err("show is too long".into());
+        }
         let sequence = Sequence::parse(bytes).map_err(|e| e.to_string())?;
-        let rendered = render(&sequence, vehicle);
         let version = room.show.as_ref().map_or(1, |s| s.version + 1);
-        let show = LoadedShow {
+        let show = LoadedShow::new(
             version,
-            name: name.chars().take(80).collect(),
-            vehicle: vehicle_name.to_owned(),
-            playable: playable_channels(&rendered),
-            duration_ms: sequence.duration().as_secs_f64() * 1000.0,
-            rendered,
-        };
+            name,
+            vehicle_name,
+            render(&sequence, vehicle),
+            sequence.duration().as_secs_f64() * 1000.0,
+        );
 
         room.playback = Playback::Paused { position_ms: 0.0 };
         let message = show_msg(&show);
@@ -436,6 +487,26 @@ impl Rooms {
         Ok(())
     }
 
+    /// Phone: records how it is doing for the host's roster.
+    pub fn status(&mut self, id: MemberId, mut health: PhoneHealth) -> Result<(), String> {
+        let room = self
+            .membership
+            .get(&id)
+            .and_then(|code| self.by_code.get_mut(code))
+            .ok_or("join a room first")?;
+        let member = room
+            .members
+            .get_mut(&id)
+            .ok_or("only phones report their status")?;
+        health.rtt_ms = health.rtt_ms.filter(|ms| ms.is_finite() && *ms >= 0.0);
+        // Unchanged reports do not cost the host a roster.
+        if member.health.as_ref() != Some(&health) {
+            member.health = Some(health);
+            room.roster_due = true;
+        }
+        Ok(())
+    }
+
     /// Host: pins a phone to a light, or clears it.
     pub fn assign(
         &mut self,
@@ -468,10 +539,8 @@ impl Rooms {
         self.by_code.values().any(|room| room.roster_due)
     }
 
-    /// Sends each host whose phones changed one roster with the current state. Rosters are
-    /// batched like this because with a big crowd one per change would swamp the host's
-    /// browser: after a Wi-Fi blip, 1000 phones dropping and coming back meant 2000 rosters
-    /// (114 MB).
+    /// Sends each host whose phones changed one roster. Batched: one per change sent 2000
+    /// rosters (114 MB) after a Wi-Fi blip with 1000 phones.
     pub fn flush_rosters(&mut self) {
         for room in self.by_code.values_mut().filter(|room| room.roster_due) {
             room.roster_due = false;
@@ -619,15 +688,9 @@ impl Room {
             },
         );
         if let (Some(show), Some(number)) = (&self.show, member.channel)
-            && let Some(levels) = show.rendered.channel_track(usize::from(number) - 1)
+            && let Some(track) = show.track(number)
         {
-            let step_ms = show.rendered.step_time().as_millis() as u8;
-            let _ = member.session.tx.send(Outgoing::Binary(encode_track(
-                show.version,
-                number,
-                step_ms,
-                &govern(&levels, step_ms),
-            )));
+            let _ = member.session.tx.send(Outgoing::Binary(track));
         }
     }
 
@@ -640,6 +703,7 @@ impl Room {
                 name: m.name.clone(),
                 channel: m.channel,
                 online: m.session.online,
+                health: m.health.clone(),
             })
             .collect();
         send(&self.host_session.tx, ServerMsg::Roster { members });
@@ -651,7 +715,7 @@ fn show_msg(show: &LoadedShow) -> ServerMsg {
         version: show.version,
         name: show.name.clone(),
         vehicle: show.vehicle.clone(),
-        step_ms: show.rendered.step_time().as_millis() as u8,
+        step_ms: show.step_ms(),
         frame_count: show.rendered.frame_count(),
         duration_ms: show.duration_ms,
     }

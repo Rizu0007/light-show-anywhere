@@ -149,7 +149,9 @@ fn decode_channel_data(header: &Header, bytes: &[u8]) -> Result<Vec<u8>> {
 fn decode_zstd(header: &Header, bytes: &[u8], expected: usize) -> Result<Vec<u8>> {
     use std::io::Read;
 
-    let mut out = Vec::with_capacity(expected);
+    // The header's size is untrusted: reserve only what the file could plausibly hold, and never
+    // decompress past it (a small file can claim, or expand to, terabytes).
+    let mut out = Vec::with_capacity(expected.min(bytes.len().saturating_mul(16)));
     let mut position = header.channel_data_offset;
 
     // Writers pad the block table with zero-length entries; skip them.
@@ -160,9 +162,11 @@ fn decode_zstd(header: &Header, bytes: &[u8], expected: usize) -> Result<Vec<u8>
         require(bytes, end)?;
 
         let mut compressed = &bytes[position..end];
-        let mut decoder = ruzstd::decoding::StreamingDecoder::new(&mut compressed)
+        let decoder = ruzstd::decoding::StreamingDecoder::new(&mut compressed)
             .map_err(|_| FseqError::Decompress { block: index })?;
+        let remaining = (expected - out.len()) as u64;
         decoder
+            .take(remaining)
             .read_to_end(&mut out)
             .map_err(|_| FseqError::Decompress { block: index })?;
         position = end;
@@ -174,7 +178,6 @@ fn decode_zstd(header: &Header, bytes: &[u8], expected: usize) -> Result<Vec<u8>
             actual: out.len(),
         });
     }
-    out.truncate(expected);
     Ok(out)
 }
 

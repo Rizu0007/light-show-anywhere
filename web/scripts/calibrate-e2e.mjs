@@ -1,19 +1,13 @@
 #!/usr/bin/env node
-// Speaker calibration in real headless Chrome, without a real speaker: the host's tones are
-// wired straight into the phone's "microphone" (once directly, once through a 200 ms delay), so
-// the Web Audio scheduling, the recorder worklet, the clock conversion and the detector are all
-// exercised. Needs `npm run dev` running. Usage:
-//   node scripts/calibrate-e2e.mjs
+// Calibration in headless Chrome: the host's tones go into a fake microphone, directly and through
+// a known 200 ms delay. Needs `npm run dev`.
 
 import { chromeSession } from "./chrome.mjs";
 
 const APP = process.env.APP ?? "http://localhost:5173";
 if (APP.startsWith("https:")) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 const ADDED_MS = 200;
-/** Allowed error of the added delay: the measurement's own accuracy, one 128-sample render block
- *  (2.7 ms at 48 kHz, 2.9 ms at 44.1 kHz), plus a little. On a machine without a sound card
- *  (CI) Chrome's stand-in audio output runs on a timer and wanders by about ±12 ms, so CI raises
- *  this with CALIBRATE_MAX_ERROR_MS. */
+/** One render block plus margin; CI (no sound card, ±12 ms jitter) raises it. */
 const MAX_ERROR_MS = Number(process.env.CALIBRATE_MAX_ERROR_MS ?? 3.5);
 /** The direct path only crosses from one audio context to another. */
 const MAX_DIRECT_MS = 60;

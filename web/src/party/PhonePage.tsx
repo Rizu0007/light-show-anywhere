@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { listenForTones } from "./calibrate";
+import { keepAwake } from "./wakeLock";
 import { ClockSync, startClockSync } from "./clock";
 import { connect, type Connection, type ServerMsg, type Track } from "./connection";
 
@@ -44,16 +45,6 @@ function saveToken(room: string, token: string | null) {
   }
 }
 
-/** Keeps the screen awake where supported (needs HTTPS on most phones). */
-async function keepAwake(): Promise<(() => void) | null> {
-  try {
-    const lock = await navigator.wakeLock?.request("screen");
-    return lock ? () => void lock.release() : null;
-  } catch {
-    return null;
-  }
-}
-
 /** Android Chrome can drive the camera flash; iPhone browsers cannot. */
 async function openTorch(): Promise<MediaStreamTrack | null> {
   try {
@@ -82,6 +73,7 @@ export function PhonePage() {
   const [torchAvailable, setTorchAvailable] = useState<boolean | null>(null);
   const [useMic, setUseMic] = useState(false);
   const [listening, setListening] = useState(false);
+  const [awake, setAwake] = useState<boolean | null>(null);
   const audioContext = useRef<AudioContext | null>(null);
 
   const screen = useRef<HTMLDivElement>(null);
@@ -92,13 +84,23 @@ export function PhonePage() {
   const roleRef = useRef<Role>(role);
   const torch = useRef<MediaStreamTrack | null>(null);
   const torchOn = useRef(false);
+  const awakeRef = useRef<boolean | null>(null);
   const cleanup = useRef<(() => void)[]>([]);
 
-  useEffect(() => () => cleanup.current.forEach((fn) => fn()), []);
+  /** Closes the connection and stops everything the join started (clock sync, wake lock…). */
+  const endSession = () => {
+    cleanup.current.forEach((fn) => fn());
+    cleanup.current = [];
+  };
+  useEffect(() => endSession, []);
 
   // Development: ?autojoin=1 joins without a tap (used by scripts/party-e2e.mjs).
+  // Deferred: React's development mode mounts, unmounts and mounts again at once, and the unmount
+  // closes the connection a join started during the first mount.
   useEffect(() => {
-    if (import.meta.env.DEV && params.get("autojoin")) void join();
+    if (!import.meta.env.DEV || !params.get("autojoin")) return;
+    const timer = setTimeout(() => void join());
+    return () => clearTimeout(timer);
     // Runs once on mount.
   }, []);
 
@@ -111,8 +113,12 @@ export function PhonePage() {
     setStatus("connecting");
     setMessage(null);
     void document.documentElement.requestFullscreen?.().catch(() => undefined);
-    const release = await keepAwake();
-    if (release) cleanup.current.push(release);
+    cleanup.current.push(
+      keepAwake((value) => {
+        awakeRef.current = value;
+        setAwake(value);
+      }),
+    );
     if (useMic) {
       // Made during the tap (browsers only start audio from one); the permission is asked now so
       // the measurement later does not wait on a prompt.
@@ -134,9 +140,30 @@ export function PhonePage() {
 
     const code = room.trim();
     let token = savedToken(code);
+    // Status for the host's roster: sent while in the room, whenever it changes.
+    let inRoom = false;
+    let opens = 0;
+    let lastStatus = "";
+    const reportStatus = () => {
+      if (!inRoom) return;
+      const sync = clock.current;
+      const status = {
+        synced: !!sync?.ready,
+        rttMs: sync && Number.isFinite(sync.bestRtt) ? Math.round(sync.bestRtt / 10) * 10 : null,
+        awake: awakeRef.current,
+        torch: useTorch ? !!torch.current : null,
+        secure: window.isSecureContext,
+        reconnects: Math.max(0, opens - 1),
+      };
+      const json = JSON.stringify(status);
+      if (json !== lastStatus && conn.send({ t: "status", ...status })) lastStatus = json;
+    };
     const conn = connect({
       // Every (re)connect takes back this phone's place, or joins as new.
       onOpen: () => {
+        opens += 1;
+        inRoom = false;
+        lastStatus = "";
         setReconnecting(false);
         conn.send(token ? { t: "resume", token } : { t: "join", room: code });
       },
@@ -150,10 +177,14 @@ export function PhonePage() {
             token = msg.token;
             saveToken(code, token);
             setStatus("joined");
+            inRoom = true;
+            reportStatus();
             break;
           case "resumed":
             setMessage(null);
             setStatus("joined");
+            inRoom = true;
+            reportStatus();
             break;
           case "expired":
             // The place was given up (away too long, or the server restarted): join as new.
@@ -184,11 +215,11 @@ export function PhonePage() {
             setMessage(msg.message);
             if (msg.message.includes("ended")) {
               saveToken(code, null);
-              conn.close();
+              endSession();
               setStatus("ended");
             } else if (msg.message.includes("not found")) {
-              // Wrong code: close this connection and let the user try again.
-              conn.close();
+              // Wrong code: let the user try again.
+              endSession();
               joining.current = false;
               setStatus("intro");
             }
@@ -203,10 +234,15 @@ export function PhonePage() {
         if (import.meta.env.DEV) (window as unknown as { __lsaTrack: Track }).__lsaTrack = t;
       },
       // The light keeps playing from the track and schedule it has while this reconnects.
-      onClose: () => setReconnecting(true),
+      onClose: () => {
+        inRoom = false;
+        setReconnecting(true);
+      },
     });
     connection.current = conn;
     cleanup.current.push(() => conn.close());
+    const statusTimer = window.setInterval(reportStatus, 1000);
+    cleanup.current.push(() => clearInterval(statusTimer));
     // One clock for the whole session: the server's clock does not change across reconnects.
     const sync = new ClockSync((m) => conn.send(m));
     clock.current = sync;
@@ -310,7 +346,9 @@ export function PhonePage() {
           Room {room} · {reconnecting ? "reconnecting…" : synced ? "synced" : "syncing…"}
           {listening && " · listening to the speaker…"}
           {torchAvailable === false && " · no flashlight"}
-          {!window.isSecureContext && " · screen may sleep (not HTTPS)"}
+          {!window.isSecureContext
+            ? " · screen may sleep (not HTTPS)"
+            : awake === false && " · screen may sleep: keep it on by hand"}
         </span>
         {message && <span className="error">{message}</span>}
       </div>

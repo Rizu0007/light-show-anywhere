@@ -1,12 +1,6 @@
 /**
- * Speaker calibration tones and the detector that finds them in a microphone recording.
- *
- * The tone is a short rising sweep. Sweeps stand out from music and voices, and correlating a
- * recording with the known sweep (a matched filter) pins down its arrival to a fraction of a
- * millisecond even in a noisy room. Several tones are recorded and averaged before searching,
- * which cancels noise that does not repeat with them.
- *
- * Pure functions (no browser APIs), so scripts/chirp-test.mjs can test them in Node.
+ * Calibration tone (a rising sweep) and its matched-filter detector, averaged over several tones.
+ * No browser APIs, so scripts/chirp-test.mjs runs it in Node.
  */
 
 /** Tone length. */

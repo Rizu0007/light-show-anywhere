@@ -189,3 +189,18 @@ fn corrupt_zstd_block_is_an_error() {
         Err(FseqError::Decompress { block: 0 })
     );
 }
+
+#[cfg(feature = "zstd")]
+#[test]
+fn zstd_file_claiming_a_huge_size_is_an_error() {
+    let frames = vec![9u8; 48 * 2];
+    let mut bytes = zstd_file(&frames, 48, &[&frames]);
+    // Billions of channels and frames, about 10^19 bytes once decoded.
+    bytes[10..14].copy_from_slice(&u32::MAX.to_le_bytes());
+    bytes[14..18].copy_from_slice(&u32::MAX.to_le_bytes());
+
+    assert!(matches!(
+        Sequence::parse(&bytes),
+        Err(FseqError::DataLength { actual: 96, .. })
+    ));
+}
