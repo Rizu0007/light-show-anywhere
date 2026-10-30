@@ -49,6 +49,10 @@ cargo run --release -p lsa-server -- --tls --static web/dist   # app + party ser
    **Use … ms** applies the median of what the phones heard. Measure with the speaker you will
    use for the song, with the show paused.
 
+The **Phones** list shows each phone's network round trip and flags phones that will not play
+well: clock not synced, slow Wi-Fi, not HTTPS, screen may sleep, no flashlight, or frequent
+reconnects. Before a real party, run the [real-phone party test](docs/party-test.md).
+
 Dropped connections are fine: a phone that loses Wi-Fi, locks its screen or reloads the page
 gets its light back when it returns, and keeps playing on its own meanwhile. If the host computer
 drops, phones keep playing and the host takes the room back when it reconnects. A place is kept

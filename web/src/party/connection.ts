@@ -16,10 +16,31 @@ export type ServerMsg =
     }
   | { t: "role"; channel: number | null; label: string | null; color: string | null }
   | { t: "playback"; playing: boolean; t0: number | null; positionMs: number }
-  | { t: "roster"; members: { id: number; name: string | null; channel: number | null; online: boolean }[] }
+  | {
+      t: "roster";
+      members: {
+        id: number;
+        name: string | null;
+        channel: number | null;
+        online: boolean;
+        health: PhoneHealth | null;
+      }[];
+    }
   | { t: "calibrate"; at: number; tones: number; gapMs: number }
   | { t: "heard"; member: number; delayMs: number | null }
   | { t: "error"; message: string };
+
+/** What a phone reports about itself (lsa-server's `PhoneHealth`). */
+export interface PhoneHealth {
+  synced: boolean;
+  rttMs: number | null;
+  /** Screen kept awake; `null` where the browser cannot. */
+  awake: boolean | null;
+  /** Flashlight works; `null` when not asked for. */
+  torch: boolean | null;
+  secure: boolean;
+  reconnects: number;
+}
 
 /** A phone's light track (binary frame). */
 export interface Track {

@@ -288,6 +288,7 @@ fn handle(
         ClientMsg::Assign { member, channel } => state.rooms().assign(id, member, channel),
         ClientMsg::Calibrate => state.rooms().calibrate(id, now),
         ClientMsg::Heard { delay_ms } => state.rooms().heard(id, delay_ms),
+        ClientMsg::Status(health) => state.rooms().status(id, health),
         ClientMsg::Leave => {
             state.rooms().leave(id);
             Ok(())

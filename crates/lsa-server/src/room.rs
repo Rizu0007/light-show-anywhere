@@ -15,7 +15,7 @@ use lsa_tesla::{Channel, Rendered, Vehicle, render};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::lights::{color_of, parse_vehicle, playable_channels};
-use crate::protocol::{RosterEntry, ServerMsg, encode_track};
+use crate::protocol::{PhoneHealth, RosterEntry, ServerMsg, encode_track};
 use crate::safety::govern;
 
 /// Delay between a play command and the show actually starting, so every phone receives it
@@ -91,6 +91,8 @@ struct Member {
     channel: Option<u16>,
     /// Chosen by the host; kept when a new show loads if still playable.
     pinned: bool,
+    /// Last report from the phone.
+    health: Option<PhoneHealth>,
 }
 
 #[derive(Debug)]
@@ -200,6 +202,7 @@ impl Rooms {
                 name: name.map(|n| n.chars().take(32).collect()),
                 channel: None,
                 pinned: false,
+                health: None,
             },
         );
         self.membership.insert(id, code);
@@ -436,6 +439,26 @@ impl Rooms {
         Ok(())
     }
 
+    /// Phone: records how it is doing for the host's roster.
+    pub fn status(&mut self, id: MemberId, mut health: PhoneHealth) -> Result<(), String> {
+        let room = self
+            .membership
+            .get(&id)
+            .and_then(|code| self.by_code.get_mut(code))
+            .ok_or("join a room first")?;
+        let member = room
+            .members
+            .get_mut(&id)
+            .ok_or("only phones report their status")?;
+        health.rtt_ms = health.rtt_ms.filter(|ms| ms.is_finite() && *ms >= 0.0);
+        // Unchanged reports do not cost the host a roster.
+        if member.health.as_ref() != Some(&health) {
+            member.health = Some(health);
+            room.roster_due = true;
+        }
+        Ok(())
+    }
+
     /// Host: pins a phone to a light, or clears it.
     pub fn assign(
         &mut self,
@@ -640,6 +663,7 @@ impl Room {
                 name: m.name.clone(),
                 channel: m.channel,
                 online: m.session.online,
+                health: m.health.clone(),
             })
             .collect();
         send(&self.host_session.tx, ServerMsg::Roster { members });

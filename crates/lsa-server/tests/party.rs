@@ -527,3 +527,40 @@ async fn cybertruck_phones_get_remapped_names_and_colours() {
     assert_eq!(role["label"], "Left Reverse Light");
     assert_eq!(role["color"], "white");
 }
+
+#[tokio::test]
+async fn phone_status_reaches_the_host_once_per_change() {
+    let url = start_server().await;
+    let (mut host, room) = host_with_show(&url).await;
+    let mut phone = Client::connect(&url).await;
+    phone.send(json!({"t": "join", "room": room})).await;
+    phone.expect("role").await;
+    let health = |awake: bool| json!({"synced": true, "rttMs": 24.0, "awake": awake, "torch": null, "secure": true, "reconnects": 1});
+
+    phone
+        .send(json!({"t": "status", "synced": true, "rttMs": 24.0, "awake": true, "secure": true, "reconnects": 1}))
+        .await;
+    let members = host
+        .roster_where(|m| m.len() == 1 && !m[0]["health"].is_null())
+        .await;
+    assert_eq!(members[0]["health"], health(true));
+
+    // The same report again costs the host nothing; the next roster is the next change.
+    phone
+        .send(json!({"t": "status", "synced": true, "rttMs": 24.0, "awake": true, "secure": true, "reconnects": 1}))
+        .await;
+    tokio::time::sleep(lsa_server::ROSTER_INTERVAL * 2).await;
+    phone
+        .send(json!({"t": "status", "synced": true, "rttMs": 24.0, "awake": false, "secure": true, "reconnects": 1}))
+        .await;
+    let roster = host.expect("roster").await;
+    assert_eq!(roster["members"][0]["health"], health(false));
+
+    // Only phones report a status.
+    host.send(json!({"t": "status", "synced": true, "secure": true}))
+        .await;
+    assert_eq!(
+        host.expect("error").await["message"],
+        "only phones report their status"
+    );
+}

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Every browser test, as CI runs them: starts lsa-server and the dev server, runs the party test
-# (plain, with a dropped phone, then over HTTPS) and the calibration test, and stops both.
+# (plain, with a dropped phone, then over HTTPS), the calibration and wake-lock tests, and stops
+# both.
 #
 #   ../scripts/fetch-tesla-example.sh   # once: the show the party test plays
 #   npm run wasm                        # once: the engine the dev server loads
@@ -55,6 +56,8 @@ echo "== party, phone 1 dropped mid-show"
 DROP=1 node scripts/party-e2e.mjs "$show"
 echo "== speaker calibration"
 node scripts/calibrate-e2e.mjs
+echo "== keeping the screen awake"
+node scripts/wake-lock-e2e.mjs
 stop
 
 start https

@@ -1,9 +1,29 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
+import type { PhoneHealth } from "./connection";
 import type { HostParty } from "./useHost";
 
 const ASSIGNABLE_LIGHTS = Array.from({ length: 30 }, (_, i) => i + 1);
 const MAX_SPEAKER_DELAY_MS = 600;
+
+/** Round trips above this make a phone's clock (and light) less reliable. */
+const SLOW_RTT_MS = 150;
+/** More reconnects than this suggest weak Wi-Fi where the phone stands. */
+const MANY_RECONNECTS = 2;
+
+/** What could make this phone play badly, in words for the host. */
+function problems(health: PhoneHealth | null): string[] {
+  if (!health) return [];
+  const found: string[] = [];
+  if (!health.synced) found.push("clock not synced");
+  if (health.rttMs !== null && health.rttMs > SLOW_RTT_MS) found.push(`slow Wi-Fi (${health.rttMs} ms)`);
+  if (!health.secure) found.push("not HTTPS");
+  else if (health.awake === false) found.push("screen may sleep");
+  else if (health.awake === null) found.push("can't keep screen awake");
+  if (health.torch === false) found.push("no flashlight");
+  if (health.reconnects > MANY_RECONNECTS) found.push(`reconnected ${health.reconnects}×`);
+  return found;
+}
 
 /** Median of the phones' measurements, rounded to the slider's 10 ms steps. */
 function suggestedDelay(delays: number[]): number | null {
@@ -29,6 +49,7 @@ export function HostPanel({ party, hasShow, nameOf, speakerDelayMs, onSpeakerDel
   const heard = party.calibration?.heard ?? [];
   const measured = heard.flatMap((h) => (h.delayMs === null ? [] : [h.delayMs]));
   const suggestion = suggestedDelay(measured);
+  const troubled = party.roster.filter((m) => m.online && problems(m.health).length > 0).length;
 
   useEffect(() => {
     if (!joinUrl) {
@@ -129,7 +150,10 @@ export function HostPanel({ party, hasShow, nameOf, speakerDelayMs, onSpeakerDel
       </div>
 
       <div className="roster">
-        <h3>Phones ({party.roster.length})</h3>
+        <h3>
+          Phones ({party.roster.length})
+          {troubled > 0 && <span className="trouble"> · {troubled} with problems</span>}
+        </h3>
         {party.roster.length === 0 && <p className="hint">Waiting for phones to join…</p>}
         <ul>
           {party.roster.map((member, i) => (
@@ -137,6 +161,12 @@ export function HostPanel({ party, hasShow, nameOf, speakerDelayMs, onSpeakerDel
               <span>
                 {member.name ?? `Phone ${i + 1}`}
                 {!member.online && <em className="offline"> · offline</em>}
+                {member.online && problems(member.health).length > 0 && (
+                  <em className="trouble"> · {problems(member.health).join(", ")}</em>
+                )}
+                {member.online && member.health?.rttMs != null && (
+                  <small className="rtt"> {member.health.rttMs} ms</small>
+                )}
               </span>
               <select
                 value={member.channel ?? ""}
