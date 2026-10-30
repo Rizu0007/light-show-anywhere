@@ -14,13 +14,22 @@ export type ServerMsg =
       cars: number;
       durationMs: number;
     }
-  | { t: "role"; car: number | null; channel: number | null; label: string | null; color: string | null }
+  | { t: "layout"; spots: [number, number][] }
+  | {
+      t: "role";
+      spot: number | null;
+      car: number | null;
+      channel: number | null;
+      label: string | null;
+      color: string | null;
+    }
   | { t: "playback"; playing: boolean; t0: number | null; positionMs: number }
   | {
       t: "roster";
       members: {
         id: number;
         name: string | null;
+        spot: number | null;
         car: number | null;
         channel: number | null;
         online: boolean;

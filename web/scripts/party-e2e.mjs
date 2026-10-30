@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Party test: a host bot and headless-Chrome phones on one light; checks each light change against
 // the track's frame times. Needs lsa-server and `npm run dev`. DROP=1 cuts phone 1 mid-show;
-// START_S plays from that second. A folder of "Car #n/lightshow.fseq" is a fleet: phone n, car n.
+// START_S plays from that second; LAYOUT=1 gives each phone a place. A folder of
+// "Car #n/lightshow.fseq" is a fleet: phone n, car n.
 //   node scripts/party-e2e.mjs <show.fseq | fleet folder> [channel] [seconds]
 
 import { readFileSync, statSync } from "node:fs";
@@ -23,6 +24,7 @@ const MAX_PHONE_GAP_MS = 20;
 const DROP = !!process.env.DROP;
 const START_MS = Number(process.env.START_S ?? 0) * 1000;
 const FLEET = statSync(showPath).isDirectory();
+const LAYOUT = !!process.env.LAYOUT;
 
 const files = (FLEET ? Array.from({ length: PHONES }, (_, i) => `${showPath}/Car #${i + 1}/lightshow.fseq`) : [showPath]).map(
   (path) => new Uint8Array(readFileSync(path)),
@@ -62,6 +64,11 @@ try {
   host.send({ t: "load", vehicle: "model-3y", name: "e2e", sizes });
   host.ws.send(new Uint8Array(files.flatMap((f) => Array.from(f))));
   const { cars } = await host.take("show");
+  if (LAYOUT) {
+    // One place per phone, side by side, all on the tested light.
+    const spots = Array.from({ length: PHONES }, (_, i) => ({ x: (i + 0.5) / PHONES, y: 0.5, car: FLEET ? i + 1 : 1, channel: CHANNEL }));
+    host.send({ t: "layout", spots });
+  }
   console.log(`room ${room}: show loaded (${cars} car(s), car 1: ${frameCount} frames × ${channelCount} channels)`);
 
   const phones = [];
@@ -78,8 +85,11 @@ try {
     console.error(`host saw: ${JSON.stringify(host.inbox.map((m) => m.t))}`);
     throw error;
   });
-  for (const [i, member] of roster.members.entries()) {
-    host.send({ t: "assign", member: member.id, car: FLEET ? i + 1 : 1, channel: CHANNEL });
+  // With a layout the places already carry the light.
+  if (!LAYOUT) {
+    for (const [i, member] of roster.members.entries()) {
+      host.send({ t: "assign", member: member.id, car: FLEET ? i + 1 : 1, channel: CHANNEL });
+    }
   }
 
   for (const [i, phone] of phones.entries()) {
@@ -87,7 +97,21 @@ try {
   }
   const label = await phones[0].evaluate(`document.querySelector(".phone-label strong")?.textContent`);
   console.log(`${PHONES} phones joined and synced, all playing channel ${CHANNEL} (${label})${FLEET ? ", one per car" : ""}`);
-  if (FLEET) {
+  if (LAYOUT) {
+    // Each phone shows its own place (join order decides which) and a map with its dot.
+    const shown = [];
+    for (const [i, phone] of phones.entries()) {
+      shown.push(
+        await until(
+          () => phone.evaluate(`document.querySelector(".phone-map-mine") && document.querySelector(".phone-car")?.textContent`),
+          `phone ${i + 1} to show its place`,
+        ),
+      );
+    }
+    const every = Array.from({ length: PHONES }, (_, i) => `Place ${i + 1}`);
+    if (shown.slice().sort().join() !== every.join()) throw new Error(`phones show ${shown.join(", ")}`);
+    console.log(`phones show ${shown.join(", ")} with a map`);
+  } else if (FLEET) {
     // Guests find their car's group by the number on screen.
     for (const [i, phone] of phones.entries()) {
       await until(

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
 import type { PhoneHealth } from "./connection";
+import type { Spot } from "./layouts";
 import type { HostParty } from "./useHost";
 
 const ASSIGNABLE_LIGHTS = Array.from({ length: 30 }, (_, i) => i + 1);
@@ -39,12 +40,14 @@ interface Props {
   hasShow: boolean;
   /** Cars in the loaded show (1 unless it is a fleet show). */
   cars: number;
+  /** Where phones stand; empty for the car shape. */
+  layout: Spot[];
   nameOf: (channel: number) => string;
   speakerDelayMs: number;
   onSpeakerDelay: (ms: number) => void;
 }
 
-export function HostPanel({ party, hasShow, cars, nameOf, speakerDelayMs, onSpeakerDelay }: Props) {
+export function HostPanel({ party, hasShow, cars, layout, nameOf, speakerDelayMs, onSpeakerDelay }: Props) {
   const [qr, setQr] = useState<string | null>(null);
   const joinUrl = party.room ? `${location.origin}/join?room=${party.room}` : null;
   const isLocalhost = ["localhost", "127.0.0.1", "::1"].includes(location.hostname);
@@ -170,29 +173,44 @@ export function HostPanel({ party, hasShow, cars, nameOf, speakerDelayMs, onSpea
                   <small className="rtt"> {member.health.rttMs} ms</small>
                 )}
               </span>
-              <select
-                value={member.channel === null ? "" : `${member.car ?? 1}:${member.channel}`}
-                onChange={(e) => {
-                  const [car, channel] = e.target.value.split(":").map(Number);
-                  party.assign(member.id, car || 1, e.target.value ? channel : null);
-                }}
-              >
-                <option value="">Auto</option>
-                {Array.from({ length: cars }, (_, i) => i + 1).map((car) => {
-                  const options = ASSIGNABLE_LIGHTS.map((channel) => (
-                    <option key={channel} value={`${car}:${channel}`}>
-                      {nameOf(channel)}
+              {layout.length > 0 ? (
+                <select
+                  value={member.spot ?? ""}
+                  onChange={(e) => party.assignSpot(member.id, e.target.value === "" ? null : Number(e.target.value))}
+                >
+                  <option value="">Any place</option>
+                  {layout.map((spot, place) => (
+                    <option key={place} value={place}>
+                      Place {place + 1} · {cars > 1 ? `Car ${spot.car} · ` : ""}
+                      {nameOf(spot.channel)}
                     </option>
-                  ));
-                  return cars > 1 ? (
-                    <optgroup key={car} label={`Car ${car}`}>
-                      {options}
-                    </optgroup>
-                  ) : (
-                    options
-                  );
-                })}
-              </select>
+                  ))}
+                </select>
+              ) : (
+                <select
+                  value={member.channel === null ? "" : `${member.car ?? 1}:${member.channel}`}
+                  onChange={(e) => {
+                    const [car, channel] = e.target.value.split(":").map(Number);
+                    party.assign(member.id, car || 1, e.target.value ? channel : null);
+                  }}
+                >
+                  <option value="">Auto</option>
+                  {Array.from({ length: cars }, (_, i) => i + 1).map((car) => {
+                    const options = ASSIGNABLE_LIGHTS.map((channel) => (
+                      <option key={channel} value={`${car}:${channel}`}>
+                        {nameOf(channel)}
+                      </option>
+                    ));
+                    return cars > 1 ? (
+                      <optgroup key={car} label={`Car ${car}`}>
+                        {options}
+                      </optgroup>
+                    ) : (
+                      options
+                    );
+                  })}
+                </select>
+              )}
             </li>
           ))}
         </ul>

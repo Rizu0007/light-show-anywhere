@@ -3,11 +3,15 @@ import { CarView, type CarViewHandle } from "./car/CarView";
 import { ClosurePanel, type ClosurePanelHandle } from "./car/ClosurePanel";
 import { Show, VEHICLES, channelName, loadEngine, type Vehicle } from "./engine";
 import { HostPanel } from "./party/HostPanel";
+import { LayoutPanel } from "./party/LayoutPanel";
+import type { LayoutViewHandle } from "./party/LayoutView";
+import type { Spot } from "./party/layouts";
 import { useHost } from "./party/useHost";
 import { useSyncedAudio } from "./party/useSyncedAudio";
 
 const UI_UPDATE_MS = 100;
 const SPEAKER_DELAY_KEY = "lsa.speakerDelayMs";
+const LAYOUT_KEY = "lsa.layout";
 const SONG = /\.(wav|mp3|m4a|ogg|flac)$/i;
 /** Most cars in a fleet show (lsa-server's MAX_CARS). */
 const MAX_CARS = 16;
@@ -21,6 +25,15 @@ function storedSpeakerDelay(): number {
     return Number(localStorage.getItem(SPEAKER_DELAY_KEY)) || 0;
   } catch {
     return 0;
+  }
+}
+
+function storedLayout(): Spot[] {
+  try {
+    const spots = JSON.parse(localStorage.getItem(LAYOUT_KEY) ?? "[]") as unknown;
+    return Array.isArray(spots) ? (spots as Spot[]) : [];
+  } catch {
+    return [];
   }
 }
 
@@ -46,6 +59,8 @@ export function App() {
 
   const car = useRef<CarViewHandle>(null);
   const closures = useRef<ClosurePanelHandle>(null);
+  const crowd = useRef<LayoutViewHandle>(null);
+  const [layout, setLayout] = useState<Spot[]>(storedLayout);
   const audio = useRef<HTMLAudioElement>(null);
   // Clock used when no song is loaded: time = offset + (now - startedAt).
   const clock = useRef({ offsetMs: 0, startedAt: 0 });
@@ -64,6 +79,21 @@ export function App() {
       // Storage may be unavailable (private mode); the setting just isn't remembered.
     }
   }
+
+  function changeLayout(spots: Spot[]) {
+    setLayout(spots);
+    try {
+      localStorage.setItem(LAYOUT_KEY, JSON.stringify(spots));
+    } catch {
+      // Not remembered in private mode.
+    }
+  }
+
+  const partyLayout = useRef(party.setLayout);
+  partyLayout.current = party.setLayout;
+  useEffect(() => {
+    if (party.active) partyLayout.current(layout);
+  }, [party.active, layout]);
 
   // Send the show to the party whenever it, the vehicle, or the party changes (not when the
   // previewed car changes: a new upload restarts the show for every phone).
@@ -118,6 +148,7 @@ export function App() {
       const levels = show.levelsAt(ms);
       car.current?.update(levels);
       closures.current?.update(levels);
+      crowd.current?.update(fleet.map((s) => (s === show ? levels : s.levelsAt(ms))));
       if (now - lastUi > UI_UPDATE_MS) {
         lastUi = now;
         setTimeMs(ms);
@@ -130,7 +161,7 @@ export function App() {
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [show, playing, currentMs, revision, party.active]);
+  }, [show, fleet, playing, currentMs, revision, party.active]);
 
   async function loadFiles(files: FileList | File[], forVehicle: Vehicle = vehicle) {
     setError(null);
@@ -350,10 +381,20 @@ export function App() {
         </section>
       )}
 
+      <LayoutPanel
+        ref={crowd}
+        spots={layout}
+        onChange={changeLayout}
+        cars={Math.max(1, fleet.length)}
+        bars={showBars}
+        nameOf={nameOf}
+      />
+
       <HostPanel
         party={party}
         hasShow={!!show}
         cars={Math.max(1, fleet.length)}
+        layout={layout}
         nameOf={nameOf}
         speakerDelayMs={speakerDelayMs}
         onSpeakerDelay={changeSpeakerDelay}

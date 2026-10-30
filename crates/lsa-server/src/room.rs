@@ -10,7 +10,7 @@ use lsa_tesla::{Channel, Rendered, Vehicle, render};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::lights::{color_of, playable_channels};
-use crate::protocol::{PhoneHealth, RosterEntry, ServerMsg, encode_track};
+use crate::protocol::{PhoneHealth, RosterEntry, ServerMsg, Spot, encode_track};
 use crate::safety::govern;
 
 /// Delay between a play command and the show actually starting, so every phone receives it
@@ -30,6 +30,8 @@ pub const MAX_SHOW_BYTES: usize = 64 * 1024 * 1024;
 pub const MAX_DECODED_BYTES: usize = 256 * 1024 * 1024;
 /// Most cars in one fleet show (Tesla's largest example has 8).
 pub const MAX_CARS: usize = 16;
+/// Most places in a layout.
+pub const MAX_SPOTS: usize = 4096;
 
 const ROOM_CODE_LEN: usize = 4;
 // No I, O, 0 or 1: codes are read aloud and typed on phones.
@@ -55,6 +57,15 @@ pub struct Slot {
     pub car: u8,
     /// Tesla channel, from 1.
     pub channel: u16,
+}
+
+impl Slot {
+    fn of(spot: Spot) -> Self {
+        Self {
+            car: spot.car,
+            channel: spot.channel,
+        }
+    }
 }
 
 /// A connection's hold on its place in a room.
@@ -98,6 +109,8 @@ impl Session {
 struct Member {
     session: Session,
     name: Option<String>,
+    /// With a layout: the phone's place in it. Its light (`slot`) is that place's light.
+    spot: Option<u16>,
     slot: Option<Slot>,
     /// Chosen by the host; kept when a new show loads if still playable.
     pinned: bool,
@@ -216,6 +229,8 @@ struct Room {
     members: BTreeMap<MemberId, Member>,
     show: Option<LoadedShow>,
     playback: Playback,
+    /// Where phones stand; empty for the car shape, where phones are dealt lights directly.
+    layout: Vec<Spot>,
     /// The phones changed since the host's last roster (see [`Rooms::flush_rosters`]).
     roster_due: bool,
 }
@@ -251,6 +266,7 @@ impl Rooms {
                 members: BTreeMap::new(),
                 show: None,
                 playback: Playback::Paused { position_ms: 0.0 },
+                layout: Vec::new(),
                 roster_due: false,
             },
         );
@@ -290,6 +306,7 @@ impl Rooms {
             Member {
                 session: Session::new(tx, token),
                 name: name.map(|n| n.chars().take(32).collect()),
+                spot: None,
                 slot: None,
                 pinned: false,
                 health: None,
@@ -443,11 +460,14 @@ impl Rooms {
         for member in room.members.values() {
             send(&member.session.tx, message.clone());
         }
-        // Pins survive when the light is in the new show; every other phone is dealt again.
-        for member in room.members.values_mut() {
-            if !(member.pinned && member.slot.is_some_and(|slot| show.slots.contains(&slot))) {
-                member.pinned = false;
-                member.slot = None;
+        // With a layout everyone keeps their place. Otherwise pins survive when the light is in
+        // the new show and every other phone is dealt again.
+        if room.layout.is_empty() {
+            for member in room.members.values_mut() {
+                if !(member.pinned && member.slot.is_some_and(|slot| show.slots.contains(&slot))) {
+                    member.pinned = false;
+                    member.slot = None;
+                }
             }
         }
         room.show = Some(show);
@@ -559,14 +579,21 @@ impl Rooms {
         Ok(())
     }
 
-    /// Host: pins a phone to a light, or clears it.
+    /// Host: pins a phone to a light (car shape) or to a place (layout), or clears it.
     pub fn assign(
         &mut self,
         host: MemberId,
         member: MemberId,
         slot: Option<Slot>,
+        place: Option<u16>,
     ) -> Result<(), String> {
         let room = self.hosted_room(host)?;
+        if room.layout.is_empty() && place.is_some() {
+            return Err("this party has no layout; choose a light".into());
+        }
+        if !room.layout.is_empty() && slot.is_some() {
+            return Err("this party uses a layout; choose a place".into());
+        }
         if let Some(Slot { car, channel }) = slot {
             if !(1..=lsa_tesla::EXTENDED_CHANNELS as u16).contains(&channel) {
                 return Err(format!("channel {channel} is out of range"));
@@ -576,15 +603,59 @@ impl Rooms {
                 return Err(format!("car {car} is not in this show"));
             }
         }
+        let layout_spot = match place {
+            Some(index) => Some(
+                *room
+                    .layout
+                    .get(usize::from(index))
+                    .ok_or_else(|| format!("place {} is not in the layout", index + 1))?,
+            ),
+            None => None,
+        };
         let phone = room
             .members
             .get_mut(&member)
             .ok_or("no such phone in this room")?;
-        phone.slot = slot;
-        phone.pinned = slot.is_some();
+        phone.spot = place;
+        phone.slot = slot.or(layout_spot.map(Slot::of));
+        phone.pinned = phone.slot.is_some();
         // Only this phone changes; the others keep their lights.
         room.assign_unpinned();
         room.send_role(member);
+        room.roster_due = true;
+        Ok(())
+    }
+
+    /// Host: sets where phones stand (empty for the car shape) and deals every phone again.
+    pub fn set_layout(&mut self, host: MemberId, spots: Vec<Spot>) -> Result<(), String> {
+        let room = self.hosted_room(host)?;
+        if spots.len() > MAX_SPOTS {
+            return Err(format!("at most {MAX_SPOTS} places in a layout"));
+        }
+        let cars = room.show.as_ref().map_or(MAX_CARS, |show| show.cars.len());
+        for (i, spot) in spots.iter().enumerate() {
+            let inside = |v: f32| (0.0..=1.0).contains(&v);
+            if !(inside(spot.x) && inside(spot.y)) {
+                return Err(format!("place {} is outside the layout", i + 1));
+            }
+            if !(1..=lsa_tesla::EXTENDED_CHANNELS as u16).contains(&spot.channel)
+                || !(1..=cars).contains(&usize::from(spot.car))
+            {
+                return Err(format!("place {} has no such light", i + 1));
+            }
+        }
+        room.layout = spots;
+        for member in room.members.values_mut() {
+            member.spot = None;
+            member.slot = None;
+            member.pinned = false;
+        }
+        room.assign_unpinned();
+        let ids: Vec<MemberId> = room.members.keys().copied().collect();
+        for id in ids {
+            room.send_layout(id);
+            room.send_role(id);
+        }
         room.roster_due = true;
         Ok(())
     }
@@ -687,6 +758,10 @@ impl Room {
     /// Gives every phone without a light the slot with the fewest phones (ties go to the earlier
     /// slot). Phones that have a light keep it, so a phone joining or leaving never moves others.
     fn assign_unpinned(&mut self) {
+        if !self.layout.is_empty() {
+            self.assign_places();
+            return;
+        }
         let Some(show) = &self.show else {
             return;
         };
@@ -705,6 +780,33 @@ impl Room {
         }
     }
 
+    /// Layout version of [`Room::assign_unpinned`]: phones without a place get the place with
+    /// the fewest phones, earliest first.
+    fn assign_places(&mut self) {
+        let mut phones = vec![0usize; self.layout.len()];
+        for member in self.members.values() {
+            if let Some(count) = member.spot.and_then(|s| phones.get_mut(usize::from(s))) {
+                *count += 1;
+            }
+        }
+        for member in self.members.values_mut().filter(|m| m.spot.is_none()) {
+            let Some((index, _)) = phones.iter().enumerate().min_by_key(|&(_, count)| *count)
+            else {
+                return;
+            };
+            member.spot = Some(index as u16);
+            member.slot = Some(Slot::of(self.layout[index]));
+            phones[index] += 1;
+        }
+    }
+
+    fn send_layout(&self, id: MemberId) {
+        if let Some(member) = self.members.get(&id) {
+            let spots = self.layout.iter().map(|s| [s.x, s.y]).collect();
+            send(&member.session.tx, ServerMsg::Layout { spots });
+        }
+    }
+
     /// Sends a phone the show, its light and track, and the playback state.
     fn send_state(&self, id: MemberId) {
         let Some(member) = self.members.get(&id) else {
@@ -712,6 +814,9 @@ impl Room {
         };
         if let Some(show) = &self.show {
             send(&member.session.tx, show_msg(show));
+        }
+        if !self.layout.is_empty() {
+            self.send_layout(id);
         }
         self.send_role(id);
         send(&member.session.tx, self.playback_msg());
@@ -730,6 +835,7 @@ impl Room {
             send(
                 &member.session.tx,
                 ServerMsg::Role {
+                    spot: member.spot,
                     car: None,
                     channel: None,
                     label: None,
@@ -744,6 +850,7 @@ impl Room {
         send(
             &member.session.tx,
             ServerMsg::Role {
+                spot: member.spot,
                 car: Some(slot.car),
                 channel: Some(slot.channel),
                 label: Some(vehicle.channel_name(channel)),
@@ -762,6 +869,7 @@ impl Room {
             .map(|(&id, m)| RosterEntry {
                 id,
                 name: m.name.clone(),
+                spot: m.spot,
                 car: m.slot.map(|s| s.car),
                 channel: m.slot.map(|s| s.channel),
                 online: m.session.online,

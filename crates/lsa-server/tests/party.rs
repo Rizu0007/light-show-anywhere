@@ -668,3 +668,94 @@ async fn fleet_uploads_must_match_their_sizes() {
         assert!(message.as_str().unwrap().contains(problem), "{message}");
     }
 }
+
+#[tokio::test]
+async fn layouts_deal_places_and_tell_phones_where_to_stand() {
+    let url = start_server().await;
+    let (mut host, room) = host_with_show(&url).await;
+    let beam = Channel::Light(Light::OuterMainBeam(Side::Left))
+        .number()
+        .unwrap();
+    let brake = Channel::Light(Light::Brake).number().unwrap();
+    // A line of three places: beam, brake, beam.
+    let spots = json!([
+        {"x": 0.0, "y": 0.5, "car": 1, "channel": beam},
+        {"x": 0.5, "y": 0.5, "car": 1, "channel": brake},
+        {"x": 1.0, "y": 0.5, "car": 1, "channel": beam},
+    ]);
+    host.send(json!({"t": "layout", "spots": spots})).await;
+
+    let mut phones = Vec::new();
+    for expected in [(0, beam), (1, brake), (2, beam), (0, beam)] {
+        let mut phone = Client::connect(&url).await;
+        phone.send(json!({"t": "join", "room": room})).await;
+        let layout = phone.expect("layout").await;
+        assert_eq!(layout["spots"], json!([[0.0, 0.5], [0.5, 0.5], [1.0, 0.5]]));
+        let role = phone.expect("role").await;
+        assert_eq!(
+            (
+                role["spot"].as_u64().unwrap(),
+                role["channel"].as_u64().unwrap()
+            ),
+            (expected.0, expected.1 as u64),
+            "places fill up evenly, in layout order"
+        );
+        phones.push(phone);
+    }
+
+    // The host moves the fourth phone to the middle place; it now plays the brake light.
+    let members = host.roster_where(|m| m.len() == 4).await;
+    host.send(json!({"t": "assign", "member": members[3]["id"], "spot": 1}))
+        .await;
+    let role = phones[3].expect("role").await;
+    assert_eq!(
+        (role["spot"].clone(), role["channel"].clone()),
+        (json!(1), json!(brake))
+    );
+    host.send(json!({"t": "assign", "member": members[3]["id"], "channel": beam}))
+        .await;
+    assert_eq!(
+        host.expect("error").await["message"],
+        "this party uses a layout; choose a place"
+    );
+
+    // A new song keeps everyone in their place.
+    host.send(json!({"t": "load", "vehicle": "model-3y", "name": "Next"}))
+        .await;
+    host.send_binary(test_show()).await;
+    assert_eq!(phones[3].expect("role").await["spot"], 1);
+
+    // Back to the car shape: phones are dealt lights again and have no place.
+    host.send(json!({"t": "layout", "spots": []})).await;
+    let role = loop {
+        let role = phones[0].expect("role").await;
+        if role["spot"].is_null() {
+            break role;
+        }
+    };
+    assert!(role["channel"].is_u64());
+}
+
+#[tokio::test]
+async fn bad_layouts_are_refused() {
+    let url = start_server().await;
+    let (mut host, _room) = host_with_show(&url).await;
+    for (spot, problem) in [
+        (
+            json!({"x": 1.5, "y": 0.5, "car": 1, "channel": 1}),
+            "outside",
+        ),
+        (
+            json!({"x": 0.5, "y": 0.5, "car": 2, "channel": 1}),
+            "no such light",
+        ),
+        (
+            json!({"x": 0.5, "y": 0.5, "car": 1, "channel": 0}),
+            "no such light",
+        ),
+    ] {
+        host.send(json!({"t": "layout", "spots": [spot]})).await;
+        let message = host.expect("error").await["message"].clone();
+        assert!(message.as_str().unwrap().contains(problem), "{message}");
+    }
+}

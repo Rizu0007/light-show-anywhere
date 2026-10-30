@@ -291,13 +291,15 @@ fn handle(
             member,
             channel,
             car,
+            spot,
         } => {
             let slot = channel.map(|channel| room::Slot {
                 car: car.unwrap_or(1),
                 channel,
             });
-            state.rooms().assign(id, member, slot)
+            state.rooms().assign(id, member, slot, spot)
         }
+        ClientMsg::Layout { spots } => state.rooms().set_layout(id, spots),
         ClientMsg::Calibrate => state.rooms().calibrate(id, now),
         ClientMsg::Heard { delay_ms } => state.rooms().heard(id, delay_ms),
         ClientMsg::Status(health) => state.rooms().status(id, health),

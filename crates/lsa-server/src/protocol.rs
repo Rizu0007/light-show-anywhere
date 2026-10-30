@@ -74,9 +74,31 @@ pub enum ClientMsg {
         /// Car of a fleet show, from 1 (default 1).
         #[serde(default)]
         car: Option<u8>,
+        /// With a layout: the spot (index into it) instead of a light.
+        #[serde(default)]
+        spot: Option<u16>,
+    },
+    /// Host: where phones stand and which light each place plays; empty for the car shape.
+    Layout {
+        /// Places, in the order phones are dealt to them.
+        spots: Vec<Spot>,
     },
     /// Phone: how it is doing, shown to the host in the roster. Sent when it changes.
     Status(PhoneHealth),
+}
+
+/// A place in a layout: where a phone stands (0–1 across and down, as the audience sees it) and
+/// the light it plays.
+#[derive(Debug, Clone, Copy, PartialEq, Deserialize, Serialize)]
+pub struct Spot {
+    /// Across, 0 (audience's left) to 1.
+    pub x: f32,
+    /// Down, 0 (back) to 1 (front).
+    pub y: f32,
+    /// Car of a fleet show, from 1.
+    pub car: u8,
+    /// 1-based Tesla channel.
+    pub channel: u16,
 }
 
 /// What a phone reports about itself, so the host can spot phones that will not play well.
@@ -152,8 +174,16 @@ pub enum ServerMsg {
         /// Show length in milliseconds.
         duration_ms: f64,
     },
+    /// Phones: every place of the room's layout as `[x, y]`, so a phone can show where it stands
+    /// (see [`ServerMsg::Role`]'s `spot`). Empty for the car shape.
+    Layout {
+        /// Places, in layout order.
+        spots: Vec<[f32; 2]>,
+    },
     /// The light this phone plays.
     Role {
+        /// With a layout: this phone's place (index into it).
+        spot: Option<u16>,
         /// Car of a fleet show, from 1, or `None` while waiting for a light.
         car: Option<u8>,
         /// 1-based Tesla channel, or `None` while waiting for a light.
@@ -210,6 +240,8 @@ pub struct RosterEntry {
     pub id: u64,
     /// Display name, if given.
     pub name: Option<String>,
+    /// Assigned place in the layout, if there is one.
+    pub spot: Option<u16>,
     /// Assigned car, from 1.
     pub car: Option<u8>,
     /// Assigned 1-based channel.

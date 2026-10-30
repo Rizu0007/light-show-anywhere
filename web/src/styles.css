@@ -97,7 +97,8 @@ header h1 {
 }
 
 select,
-button {
+button,
+input[type="number"] {
   font: inherit;
   color: var(--text);
   background: #182030;
@@ -427,4 +428,78 @@ button.secondary {
   font-size: 2.4rem;
   font-weight: 700;
   letter-spacing: 0.04em;
+}
+
+/* Crowd layouts: the preview and editor on the host page. */
+.layout {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.layout-make,
+.layout-place {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.layout-make input[type="number"] {
+  width: 5em;
+  padding: 8px 10px;
+}
+
+.layout-view {
+  width: 100%;
+  aspect-ratio: 5 / 3;
+  background: #05070a;
+  border-radius: 8px;
+  touch-action: none;
+  outline: none;
+}
+
+.layout-view .place {
+  cursor: grab;
+}
+
+.layout-view .lens {
+  fill: #151b25;
+}
+
+.layout-view .lit {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.layout-view .selected .lens {
+  stroke: var(--accent);
+  stroke-width: 4;
+}
+
+.layout-stage {
+  fill: var(--muted);
+  font-size: 22px;
+  text-anchor: middle;
+}
+
+/* Phone: where to stand. */
+.phone-map {
+  width: min(60vw, 240px);
+  margin: 0 auto;
+}
+
+.phone-map-floor {
+  fill: rgba(255, 255, 255, 0.06);
+}
+
+.phone-map-place {
+  fill: rgba(255, 255, 255, 0.35);
+}
+
+.phone-map-mine {
+  fill: #fff;
 }
