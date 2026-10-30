@@ -16,6 +16,13 @@ Crowd Light Show's NOTICE:
 
     This product includes software developed by Andrii Shramko.
 
+Libraries
+=========
+
+Video export uses Mediabunny (https://github.com/Vanilagy/mediabunny), unmodified, under the
+Mozilla Public License 2.0 (https://mozilla.org/MPL/2.0/); its source is available there and in
+the npm package.
+
 Facts, not code
 ===============
 

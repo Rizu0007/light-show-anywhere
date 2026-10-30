@@ -16,6 +16,8 @@ const https = process.env.LSA_HTTPS
 
 export default defineConfig({
   plugins: [react()],
+  // The largest chunk is Mediabunny (~730 kB), loaded only when a video is exported.
+  build: { chunkSizeWarningLimit: 800 },
   server: {
     host: true,
     // Lets the dev shortcut (?show=/@fs/...) read shows from the repository's shows/ folder.

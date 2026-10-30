@@ -15,6 +15,20 @@ export const COLORS = {
   barWhite: "#e9f2ff",
 } as const;
 
+/** The car body, the same from the front and the rear (SVG paths and rects in view units). */
+export const BODY = {
+  shell:
+    "M40 150 C40 120 60 104 96 98 L140 60 C150 50 160 46 175 46 L225 46 C240 46 250 50 260 60 L304 98 C340 104 360 120 360 150 L360 196 C360 204 354 210 346 210 L54 210 C46 210 40 204 40 196 Z",
+  glass: "M150 62 L250 62 L286 96 L114 96 Z",
+  bumper: { x: 70, y: 192, w: 260, h: 10, r: 4 },
+  wheels: [
+    { x: 58, y: 204, w: 44, h: 26, r: 6 },
+    { x: 298, y: 204, w: 44, h: 26, r: 6 },
+  ],
+  /** Rear view only. */
+  plate: { x: 176, y: 164, w: 48, h: 22, r: 3 },
+} as const;
+
 export type Shape =
   | { kind: "rect"; x: number; y: number; w: number; h: number; r?: number }
   | { kind: "ellipse"; cx: number; cy: number; rx: number; ry: number };
