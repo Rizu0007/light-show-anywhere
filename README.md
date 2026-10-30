@@ -71,6 +71,11 @@ phones, in the lights' colours and through the same flash limit, over DDP (UDP p
 When the party ends they go back to their own effects. Only the server's operator chooses the
 strips; hosts cannot point the server's packets elsewhere.
 
+**Export video** (next to the show's details) saves the preview with the song as a 1280 × 720
+video: MP4 (H.264 + AAC) where the browser can make it, otherwise WebM. Frames are rendered one
+by one, so the video is frame-exact and quicker than playing the show (a 30 s clip takes about
+9 s). With a crowd layout, tick *film the crowd layout* to film the crowd instead of the car.
+
 The **Phones** list shows each phone's network round trip and flags phones that will not play
 well: clock not synced, slow Wi-Fi, not HTTPS, screen may sleep, no flashlight, or frequent
 reconnects. Before a real party, run the [real-phone party test](docs/party-test.md).

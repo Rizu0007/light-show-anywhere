@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useImperativeHandle, useRef } from "react";
 import {
+  BODY,
   INTERIOR,
   LIGHT_BARS,
   LIGHT_SPOTS,
@@ -47,15 +48,15 @@ function Body({ view }: { view: View }) {
   const glass = view === "front" ? "windshield" : "rear-window";
   return (
     <g className="body">
-      <path
-        className="body-shell"
-        d="M40 150 C40 120 60 104 96 98 L140 60 C150 50 160 46 175 46 L225 46 C240 46 250 50 260 60 L304 98 C340 104 360 120 360 150 L360 196 C360 204 354 210 346 210 L54 210 C46 210 40 204 40 196 Z"
-      />
-      <path className={`glass ${glass}`} data-glass d="M150 62 L250 62 L286 96 L114 96 Z" />
-      <rect className="bumper" x="70" y="192" width="260" height="10" rx="4" />
-      <rect className="wheel" x="58" y="204" width="44" height="26" rx="6" />
-      <rect className="wheel" x="298" y="204" width="44" height="26" rx="6" />
-      {view === "rear" && <rect className="plate" x="176" y="164" width="48" height="22" rx="3" />}
+      <path className="body-shell" d={BODY.shell} />
+      <path className={`glass ${glass}`} data-glass d={BODY.glass} />
+      <rect className="bumper" x={BODY.bumper.x} y={BODY.bumper.y} width={BODY.bumper.w} height={BODY.bumper.h} rx={BODY.bumper.r} />
+      {BODY.wheels.map((w, i) => (
+        <rect key={i} className="wheel" x={w.x} y={w.y} width={w.w} height={w.h} rx={w.r} />
+      ))}
+      {view === "rear" && (
+        <rect className="plate" x={BODY.plate.x} y={BODY.plate.y} width={BODY.plate.w} height={BODY.plate.h} rx={BODY.plate.r} />
+      )}
     </g>
   );
 }

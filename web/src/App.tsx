@@ -8,6 +8,7 @@ import type { LayoutViewHandle } from "./party/LayoutView";
 import type { Spot } from "./party/layouts";
 import { useHost } from "./party/useHost";
 import { useSyncedAudio } from "./party/useSyncedAudio";
+import { ExportButton } from "./video/ExportButton";
 
 const UI_UPDATE_MS = 100;
 const SPEAKER_DELAY_KEY = "lsa.speakerDelayMs";
@@ -378,6 +379,14 @@ export function App() {
               </span>
             ))
           )}
+          <ExportButton
+            fleet={fleet}
+            car={Math.max(0, fleet.indexOf(show))}
+            bars={showBars}
+            layout={layout}
+            title={showName}
+            songUrl={audioUrl}
+          />
         </section>
       )}
 

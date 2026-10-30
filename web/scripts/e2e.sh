@@ -55,6 +55,8 @@ echo "== fleet show, one phone per car"
 START_S=18 node scripts/party-e2e.mjs "$root/shows/tesla/lightshow_example_3_The_Arrival_5_Car" 13 12
 echo "== speaker calibration"
 node scripts/calibrate-e2e.mjs
+echo "== video export"
+node scripts/video-e2e.mjs "$show" "$(dirname "$show")/lightshow.wav"
 echo "== keeping the screen awake"
 node scripts/wake-lock-e2e.mjs
 stop
