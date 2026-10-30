@@ -13,6 +13,7 @@ const COLORS: Record<string, [number, number, number]> = {
 type Status = "intro" | "connecting" | "joined" | "ended";
 
 interface Role {
+  car: number | null;
   channel: number | null;
   label: string | null;
   color: string | null;
@@ -65,7 +66,8 @@ export function PhonePage() {
   const params = new URLSearchParams(location.search);
   const [room, setRoom] = useState((params.get("room") ?? "").toUpperCase());
   const [status, setStatus] = useState<Status>("intro");
-  const [role, setRole] = useState<Role>({ channel: null, label: null, color: null });
+  const [role, setRole] = useState<Role>({ car: null, channel: null, label: null, color: null });
+  const [cars, setCars] = useState(1);
   const [message, setMessage] = useState<string | null>(null);
   const [synced, setSynced] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
@@ -193,8 +195,11 @@ export function PhonePage() {
             clock.current?.reset();
             conn.send({ t: "join", room: code });
             break;
+          case "show":
+            setCars(msg.cars);
+            break;
           case "role":
-            roleRef.current = { channel: msg.channel, label: msg.label, color: msg.color };
+            roleRef.current = { car: msg.car, channel: msg.channel, label: msg.label, color: msg.color };
             setRole(roleRef.current);
             if (msg.channel === null) track.current = null;
             break;
@@ -341,6 +346,7 @@ export function PhonePage() {
   return (
     <div className="phone-light" ref={screen}>
       <div className="phone-label">
+        {cars > 1 && role.car !== null && <span className="phone-car">Car {role.car}</span>}
         <strong>{role.label ?? "Waiting for a light…"}</strong>
         <span>
           Room {room} · {reconnecting ? "reconnecting…" : synced ? "synced" : "syncing…"}

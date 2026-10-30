@@ -572,3 +572,99 @@ async fn phone_status_reaches_the_host_once_per_change() {
         "only phones report their status"
     );
 }
+
+/// A 48-channel show at `step_ms` where `lights` are on throughout.
+fn show_with(step_ms: u8, lights: &[Light]) -> Vec<u8> {
+    let mut data = vec![0u8; 48 * 50];
+    for frame in data.as_chunks_mut::<48>().0 {
+        for &light in lights {
+            frame[Channel::Light(light).index().unwrap()] = 255;
+        }
+    }
+    Sequence::from_frames(48, step_ms, data)
+        .unwrap()
+        .to_bytes()
+        .unwrap()
+}
+
+#[tokio::test]
+async fn fleet_shows_deal_every_car_its_main_lights_first() {
+    let url = start_server().await;
+    let mut host = Client::connect(&url).await;
+    host.send(json!({"t": "create"})).await;
+    let room = host.expect("created").await["room"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    // Car 2 runs at a different frame rate and uses fewer lights, as in Tesla's fleet examples.
+    let car1 = show_with(20, &[Light::OuterMainBeam(Side::Left), Light::Brake]);
+    let car2 = show_with(40, &[Light::OuterMainBeam(Side::Left)]);
+    let sizes = [car1.len(), car2.len()];
+    host.send(json!({"t": "load", "vehicle": "model-3y", "name": "Fleet", "sizes": sizes}))
+        .await;
+    host.send_binary([car1, car2].concat()).await;
+    assert_eq!(host.expect("show").await["cars"], 2);
+
+    let beam = Channel::Light(Light::OuterMainBeam(Side::Left))
+        .number()
+        .unwrap();
+    let brake = Channel::Light(Light::Brake).number().unwrap();
+    let mut seen = Vec::new();
+    let mut phones = Vec::new();
+    for _ in 0..3 {
+        let mut phone = Client::connect(&url).await;
+        phone.send(json!({"t": "join", "room": room})).await;
+        let role = phone.expect("role").await;
+        let track = phone.expect_binary().await;
+        // The track says which car it belongs to and runs at that car's frame rate.
+        assert_eq!(track[11], role["car"].as_u64().unwrap() as u8);
+        assert_eq!(track[10], if role["car"] == 1 { 20 } else { 40 });
+        seen.push((
+            role["car"].as_u64().unwrap(),
+            role["channel"].as_u64().unwrap(),
+        ));
+        phones.push(phone);
+    }
+    // Both cars' headlights before any car's brake light.
+    assert_eq!(
+        seen,
+        [(1, beam as u64), (2, beam as u64), (1, brake as u64)]
+    );
+
+    // The host can move a phone to a light of another car.
+    let members = host.roster_where(|m| m.len() == 3).await;
+    host.send(json!({"t": "assign", "member": members[2]["id"], "car": 2, "channel": beam}))
+        .await;
+    let role = phones[2].expect("role").await;
+    assert_eq!(
+        (role["car"].clone(), role["channel"].clone()),
+        (json!(2), json!(beam))
+    );
+    host.send(json!({"t": "assign", "member": members[2]["id"], "car": 3, "channel": beam}))
+        .await;
+    assert_eq!(
+        host.expect("error").await["message"],
+        "car 3 is not in this show"
+    );
+}
+
+#[tokio::test]
+async fn fleet_uploads_must_match_their_sizes() {
+    let url = start_server().await;
+    let mut host = Client::connect(&url).await;
+    host.send(json!({"t": "create"})).await;
+    host.expect("created").await;
+    let show = show_with(20, &[Light::Brake]);
+    for (sizes, problem) in [
+        (vec![show.len(), show.len() + 1], "shorter"),
+        (vec![show.len(), 1], "longer"),
+        (vec![1; 17], "at most 16 cars"),
+    ] {
+        host.send(json!({"t": "load", "vehicle": "model-3y", "name": "Bad", "sizes": sizes}))
+            .await;
+        host.send_binary([show.clone(), show.clone()].concat())
+            .await;
+        let message = host.expect("error").await["message"].clone();
+        assert!(message.as_str().unwrap().contains(problem), "{message}");
+    }
+}

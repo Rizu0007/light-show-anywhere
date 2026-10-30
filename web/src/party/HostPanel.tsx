@@ -37,12 +37,14 @@ function suggestedDelay(delays: number[]): number | null {
 interface Props {
   party: HostParty;
   hasShow: boolean;
+  /** Cars in the loaded show (1 unless it is a fleet show). */
+  cars: number;
   nameOf: (channel: number) => string;
   speakerDelayMs: number;
   onSpeakerDelay: (ms: number) => void;
 }
 
-export function HostPanel({ party, hasShow, nameOf, speakerDelayMs, onSpeakerDelay }: Props) {
+export function HostPanel({ party, hasShow, cars, nameOf, speakerDelayMs, onSpeakerDelay }: Props) {
   const [qr, setQr] = useState<string | null>(null);
   const joinUrl = party.room ? `${location.origin}/join?room=${party.room}` : null;
   const isLocalhost = ["localhost", "127.0.0.1", "::1"].includes(location.hostname);
@@ -169,15 +171,27 @@ export function HostPanel({ party, hasShow, nameOf, speakerDelayMs, onSpeakerDel
                 )}
               </span>
               <select
-                value={member.channel ?? ""}
-                onChange={(e) => party.assign(member.id, e.target.value ? Number(e.target.value) : null)}
+                value={member.channel === null ? "" : `${member.car ?? 1}:${member.channel}`}
+                onChange={(e) => {
+                  const [car, channel] = e.target.value.split(":").map(Number);
+                  party.assign(member.id, car || 1, e.target.value ? channel : null);
+                }}
               >
                 <option value="">Auto</option>
-                {ASSIGNABLE_LIGHTS.map((channel) => (
-                  <option key={channel} value={channel}>
-                    {nameOf(channel)}
-                  </option>
-                ))}
+                {Array.from({ length: cars }, (_, i) => i + 1).map((car) => {
+                  const options = ASSIGNABLE_LIGHTS.map((channel) => (
+                    <option key={channel} value={`${car}:${channel}`}>
+                      {nameOf(channel)}
+                    </option>
+                  ));
+                  return cars > 1 ? (
+                    <optgroup key={car} label={`Car ${car}`}>
+                      {options}
+                    </optgroup>
+                  ) : (
+                    options
+                  );
+                })}
               </select>
             </li>
           ))}

@@ -47,6 +47,8 @@ echo "== party"
 node scripts/party-e2e.mjs "$show"
 echo "== party, phone 1 dropped mid-show"
 DROP=1 node scripts/party-e2e.mjs "$show"
+echo "== fleet show, one phone per car"
+START_S=18 node scripts/party-e2e.mjs "$root/shows/tesla/lightshow_example_3_The_Arrival_5_Car" 13 12
 echo "== speaker calibration"
 node scripts/calibrate-e2e.mjs
 echo "== keeping the screen awake"

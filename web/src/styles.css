@@ -421,3 +421,10 @@ button.secondary {
   mix-blend-mode: difference;
   font-size: 0.9rem;
 }
+
+/* Fleet shows: big enough to read across a room, so guests find their car's group. */
+.phone-car {
+  font-size: 2.4rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}

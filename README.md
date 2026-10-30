@@ -49,6 +49,12 @@ cargo run --release -p lsa-server -- --tls --static web/dist   # app + party ser
    **Use … ms** applies the median of what the phones heard. Measure with the speaker you will
    use for the song, with the show paused.
 
+**Fleet shows** (Tesla's multi-car shows: one `.fseq` per car in `Car #1`, `Car #2`… folders)
+load with **Fleet show (folder)**. Phones are dealt across the cars, every car's headlights
+first, and each phone shows its car number in large type: group the guests by car, numbered
+left to right as seen from the front. **Preview car** picks which car the preview shows; the
+host can move a phone to any car's light.
+
 The **Phones** list shows each phone's network round trip and flags phones that will not play
 well: clock not synced, slow Wi-Fi, not HTTPS, screen may sleep, no flashlight, or frequent
 reconnects. Before a real party, run the [real-phone party test](docs/party-test.md).
