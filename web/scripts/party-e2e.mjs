@@ -112,13 +112,13 @@ try {
     if (shown.slice().sort().join() !== every.join()) throw new Error(`phones show ${shown.join(", ")}`);
     console.log(`phones show ${shown.join(", ")} with a map`);
   } else if (FLEET) {
-    // Guests find their car's group by the number on screen.
+    // Guests find their car's group by the number on screen (join order decides which car).
+    const shown = [];
     for (const [i, phone] of phones.entries()) {
-      await until(
-        () => phone.evaluate(`document.querySelector(".phone-car")?.textContent === "Car ${i + 1}"`),
-        `phone ${i + 1} to show "Car ${i + 1}"`,
-      );
+      shown.push(await until(() => phone.evaluate(`document.querySelector(".phone-car")?.textContent`), `phone ${i + 1} to show its car`));
     }
+    const every = Array.from({ length: PHONES }, (_, i) => `Car ${i + 1}`);
+    if (shown.slice().sort().join() !== every.join()) throw new Error(`phones show ${shown.join(", ")}`);
   }
 
   // Each phone reports its health to the host's roster.
@@ -143,10 +143,12 @@ try {
     const opens = await phones[0].evaluate("window.__lsaOpens");
     const back = host.inbox.filter((m) => m.t === "roster").pop();
     const online = back?.members.length === PHONES && back.members.every((m) => m.online && m.channel === CHANNEL);
-    const counted = back?.members[0].health?.reconnects >= 1;
+    // Roster order is join order, which is not page order: count the phones that reconnected.
+    const reconnects = back?.members.map((m) => m.health?.reconnects ?? 0) ?? [];
+    const counted = reconnects.filter((n) => n >= 1).length === 1;
     console.log(
       `phone 1 connected ${opens} times; host roster: ${online ? "both online on the same light" : JSON.stringify(back)}` +
-        `, phone 1 reports ${back?.members[0].health?.reconnects ?? "no"} reconnect(s)`,
+        `, reconnects reported: ${reconnects.join(", ")}`,
     );
     reconnected = opens >= 2 && online && counted;
   } else {
