@@ -5,7 +5,7 @@
 //   node scripts/video-e2e.mjs <show.fseq> <song>
 
 import { resolve } from "node:path";
-import { chromeSession, until } from "./chrome.mjs";
+import { browserSession, until } from "./browser.mjs";
 
 const APP = process.env.APP ?? "http://localhost:5173";
 if (APP.startsWith("https:")) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -22,7 +22,7 @@ const check = (what, ok, detail = "") => {
   if (!ok) failed++;
 };
 
-const chrome = await chromeSession();
+const chrome = await browserSession();
 try {
   const page = await chrome.openPage(
     `${APP}/?show=/@fs${resolve(showPath)}&song=/@fs${resolve(songPath)}&exportSeconds=${SECONDS}`,

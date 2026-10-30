@@ -2,7 +2,7 @@
 // Calibration in headless Chrome: the host's tones go into a fake microphone, directly and through
 // a known 200 ms delay. Needs `npm run dev`.
 
-import { chromeSession } from "./chrome.mjs";
+import { browserSession } from "./browser.mjs";
 
 const APP = process.env.APP ?? "http://localhost:5173";
 if (APP.startsWith("https:")) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -12,7 +12,7 @@ const MAX_ERROR_MS = Number(process.env.CALIBRATE_MAX_ERROR_MS ?? 3.5);
 /** The direct path only crosses from one audio context to another. */
 const MAX_DIRECT_MS = 60;
 
-const chrome = await chromeSession(["--autoplay-policy=no-user-gesture-required"]);
+const chrome = await browserSession(["--autoplay-policy=no-user-gesture-required"]);
 try {
   const page = await chrome.openPage(`${APP}/`);
   await new Promise((r) => setTimeout(r, 1500));
