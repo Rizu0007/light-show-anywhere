@@ -82,7 +82,8 @@ reconnects. Before a real party, run the [real-phone party test](docs/party-test
 
 Dropped connections are fine: a phone that loses Wi-Fi, locks its screen or reloads the page
 gets its light back when it returns, and keeps playing on its own meanwhile. If the host computer
-drops, phones keep playing and the host takes the room back when it reconnects. A place is kept
+drops, or its tab is reloaded, phones keep playing and the host takes the room back (a
+reloaded tab does not re-send the same show, so nothing restarts). A place is kept
 for 2 minutes; **End party** closes the room at once.
 
 How many phones? The server is not the limit: in its load test one laptop serves 2000 phones,

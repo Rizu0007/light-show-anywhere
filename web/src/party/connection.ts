@@ -5,6 +5,8 @@ export type ServerMsg =
   | { t: "joined"; id: number; room: string; token: string }
   | { t: "resumed"; id: number; room: string; host: boolean }
   | { t: "expired" }
+  | { t: "ended" }
+  | { t: "noRoom"; room: string }
   | {
       t: "show";
       version: number;

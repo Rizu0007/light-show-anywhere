@@ -16,11 +16,12 @@ export interface CalibrationRequest {
 /** A just-started audio clock runs unevenly (up to 8 ms off); after 2 s it is within a block. */
 const WARM_UP_S = 2;
 
-/** `performance.now()` minus the audio clock (ms): the smallest difference seen, ± one block. */
+/** `performance.now()` minus the audio clock (ms): the smallest difference seen over 0.5 s, ± one
+ *  block. Over 150 ms, bursty rendering sometimes left it two blocks off. */
 async function audioOffset(ctx: AudioContext): Promise<number> {
   while (ctx.currentTime < WARM_UP_S) await new Promise((resolve) => setTimeout(resolve, 10));
   let best = Infinity;
-  const until = performance.now() + 150;
+  const until = performance.now() + 500;
   while (performance.now() < until) {
     best = Math.min(best, performance.now() - ctx.currentTime * 1000);
     await new Promise((resolve) => setTimeout(resolve, 2));

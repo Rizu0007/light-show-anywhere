@@ -236,18 +236,21 @@ export function PhonePage() {
               });
             }
             break;
+          case "ended":
+            saveToken(code, null);
+            endSession();
+            setMessage("The host ended the party.");
+            setStatus("ended");
+            break;
+          case "noRoom":
+            // Wrong code: let the user try again.
+            endSession();
+            joining.current = false;
+            setMessage(`There is no room ${msg.room}. Check the code.`);
+            setStatus("intro");
+            break;
           case "error":
             setMessage(msg.message);
-            if (msg.message.includes("ended")) {
-              saveToken(code, null);
-              endSession();
-              setStatus("ended");
-            } else if (msg.message.includes("not found")) {
-              // Wrong code: let the user try again.
-              endSession();
-              joining.current = false;
-              setStatus("intro");
-            }
             break;
           default:
             break;
