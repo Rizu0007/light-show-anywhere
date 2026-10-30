@@ -10,8 +10,11 @@ import { chromeSession } from "./chrome.mjs";
 const APP = process.env.APP ?? "http://localhost:5173";
 if (APP.startsWith("https:")) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 const ADDED_MS = 200;
-/** Allowed error of the added delay (the measurement's own accuracy). */
-const MAX_ERROR_MS = 3;
+/** Allowed error of the added delay: the measurement's own accuracy, one 128-sample render block
+ *  (2.7 ms at 48 kHz, 2.9 ms at 44.1 kHz), plus a little. On a machine without a sound card
+ *  (CI) Chrome's stand-in audio output runs on a timer and wanders by about ±12 ms, so CI raises
+ *  this with CALIBRATE_MAX_ERROR_MS. */
+const MAX_ERROR_MS = Number(process.env.CALIBRATE_MAX_ERROR_MS ?? 3.5);
 /** The direct path only crosses from one audio context to another. */
 const MAX_DIRECT_MS = 60;
 
@@ -31,7 +34,8 @@ try {
       const microphone = host.createMediaStreamDestination();
       delay.connect(microphone);
       navigator.mediaDevices.getUserMedia = async () => microphone.stream;
-      const request = { at: now() + 1000, tones: 5, gapMs: 700 };
+      // Both contexts are new, so the first round waits for their clocks to settle (calibrate.ts).
+      const request = { at: now() + 3000, tones: 5, gapMs: 700 };
       const [heard] = await Promise.all([
         listenForTones(phone, now, request),
         playTones(host, now, request, delay),

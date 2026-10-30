@@ -99,6 +99,9 @@ export function useHost(): HostParty {
     if (conn.current) return;
     setActive(true);
     setError(null);
+    // Made on this click (browsers only start audio from one) rather than on Calibrate, so its
+    // clock has settled by the time the speaker is measured (see calibrate.ts).
+    audioContext.current ??= new AudioContext();
     const connection = connect({
       onOpen: () => {
         setConnected(true);

@@ -20,10 +20,20 @@ export interface CalibrationRequest {
 }
 
 /**
+ * Seconds an audio context must have run before its clock is trusted. Measured on a context
+ * that had just started, calibrations came out up to 8 ms off; after 0.5 s still up to 5 ms;
+ * after 2 s within one render block (calibrate-e2e). The phone's context and the host's are
+ * made when joining and starting the party, so this only waits if calibration follows at once.
+ */
+const WARM_UP_S = 2;
+
+/**
  * `performance.now()` minus the audio clock, in milliseconds. The audio clock only moves when
- * a block is rendered, so the smallest difference seen is closest to the render moment.
+ * a block is rendered, so the smallest difference seen is closest to the render moment; the
+ * result can still be one render block (128 samples, 2.7 ms at 48 kHz) off.
  */
 async function audioOffset(ctx: AudioContext): Promise<number> {
+  while (ctx.currentTime < WARM_UP_S) await new Promise((resolve) => setTimeout(resolve, 10));
   let best = Infinity;
   const until = performance.now() + 150;
   while (performance.now() < until) {
