@@ -6,15 +6,18 @@
   "scripts": {
     "wasm": "wasm-pack build ../crates/lsa-wasm --target web --release --out-dir ../../web/src/engine/pkg --no-pack",
     "dev": "npm run wasm && vite",
+    "dev:https": "npm run wasm && LSA_HTTPS=1 vite",
     "build": "npm run wasm && tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit",
     "preview": "vite preview"
   },
   "dependencies": {
+    "qrcode": "1.5.4",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@types/qrcode": "1.5.6",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "@vitejs/plugin-react": "6.1.2",

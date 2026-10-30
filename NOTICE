@@ -1,0 +1,24 @@
+Light Show Anywhere
+
+Third-party code
+================
+
+web/src/party/clock.ts is a TypeScript port of public/clocksync.js from Crowd Light Show
+(https://github.com/AndriiShramko/crowd-light-show), licensed under the Apache License 2.0
+(see licenses/Apache-2.0.txt). Changes: rewritten as a TypeScript class, the ping loop and
+background-tab handling moved into startClockSync(), and telemetry fields removed.
+
+Crowd Light Show's NOTICE:
+
+    Crowd Light Show
+    Copyright 2026 Andrii Shramko
+    https://www.linkedin.com/in/andrii-shramko/
+
+    This product includes software developed by Andrii Shramko.
+
+Facts, not code
+===============
+
+The Tesla channel map and command meanings follow Tesla's public documentation and xLights
+template (https://github.com/teslamotors/light-show). No Tesla files are included.
+LightCue (https://github.com/wmorrill3/lightcue, MIT) was used only as a cross-check.

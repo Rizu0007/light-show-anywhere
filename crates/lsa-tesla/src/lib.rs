@@ -8,10 +8,10 @@
 //! - [`LightCommand`] and [`ClosureCommand`]: what a channel byte means.
 //! - [`render`]: emulates a whole show and stores each channel's output per frame.
 //! - [`closure_usage`]: checks Tesla's per-show closure command limits.
-//!
-//! Not modelled yet: channels the vehicle combines with OR (aux park / side markers, channels
-//! 4–6 on Model 3/Y), channel 4 setting the ramp time for channels 5–6, and Cybertruck
-//! light remapping.
+//! - [`Vehicle::wiring`]: channels the vehicle ORs into one light (aux park / side markers,
+//!   channels 4–6 on Model 3/Y) and channel 4 setting the ramp time for channels 5–6.
+//! - [`Vehicle::channel_name`]: Cybertruck's remapped lights (tail → reverse lights, reverse →
+//!   bed lights, …).
 //!
 //! ```
 //! use lsa_fseq::Sequence;
@@ -44,4 +44,4 @@ pub use channel::{
 pub use closure::{ClosureUsage, closure_usage};
 pub use command::{ClosureCommand, LightCommand};
 pub use emulate::{Emulator, Rendered, render};
-pub use vehicle::{Behavior, Vehicle};
+pub use vehicle::{Behavior, Vehicle, Wiring};

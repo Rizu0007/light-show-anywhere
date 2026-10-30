@@ -319,3 +319,187 @@ fn closure_command_limits() {
             .all(|u| u.commands == 0)
     );
 }
+
+// ---------------------------------------------------------------- mapping notes
+
+const ON_1000: u8 = 204;
+const OFF_500: u8 = 25;
+
+/// Builds a 48-channel show from per-frame values of several channels; others stay 0.
+fn show_with(tracks: &[(Light, &[u8])]) -> Sequence {
+    let frames = tracks.iter().map(|(_, v)| v.len()).max().unwrap_or(0);
+    let mut data = vec![0u8; STANDARD_CHANNELS * frames];
+    for (light, values) in tracks {
+        let channel = Channel::Light(*light).index().unwrap();
+        for (frame, &value) in data
+            .as_chunks_mut::<STANDARD_CHANNELS>()
+            .0
+            .iter_mut()
+            .zip(*values)
+        {
+            frame[channel] = value;
+        }
+    }
+    Sequence::from_frames(STANDARD_CHANNELS as u32, STEP_MS, data).unwrap()
+}
+
+fn track_of(show: &Sequence, vehicle: Vehicle, light: Light) -> Vec<u8> {
+    render(show, vehicle)
+        .channel_track(Channel::Light(light).index().unwrap())
+        .unwrap()
+}
+
+#[test]
+fn aux_park_and_side_markers_are_ored_per_vehicle() {
+    let show = show_with(&[(Light::AuxPark(Side::Left), &[255, 255])]);
+    let lit = |vehicle, light| track_of(&show, vehicle, light) == [255, 255];
+    let all = [
+        Light::AuxPark(Side::Left),
+        Light::AuxPark(Side::Right),
+        Light::SideMarker(Side::Left),
+        Light::SideMarker(Side::Right),
+    ];
+
+    // Model 3/Y: all four operate together.
+    assert!(all.iter().all(|&light| lit(Vehicle::Model3Y, light)));
+    // Model S: together, but left and right separately.
+    assert!(lit(Vehicle::ModelS, Light::SideMarker(Side::Left)));
+    assert!(!lit(Vehicle::ModelS, Light::AuxPark(Side::Right)));
+    assert!(!lit(Vehicle::ModelS, Light::SideMarker(Side::Right)));
+    // Model X: no shared outputs documented.
+    assert!(!lit(Vehicle::ModelX, Light::SideMarker(Side::Left)));
+}
+
+#[test]
+fn ored_lights_need_shared_off_time_to_flash() {
+    // README: back-to-back boxes on different OR'd channels keep the light on; a gap flashes it.
+    let left = [255, 255, 0, 0, 0, 0];
+    let right_touching = [0, 0, 255, 255, 0, 0];
+    let right_with_gap = [0, 0, 0, 255, 255, 0];
+    let aux = Light::AuxPark(Side::Left);
+    let marker = Light::SideMarker(Side::Right);
+
+    let steady = show_with(&[(aux, &left), (marker, &right_touching)]);
+    assert_eq!(
+        track_of(&steady, Vehicle::Model3Y, aux),
+        [255, 255, 255, 255, 0, 0]
+    );
+    let flashing = show_with(&[(aux, &left), (marker, &right_with_gap)]);
+    assert_eq!(
+        track_of(&flashing, Vehicle::Model3Y, aux),
+        [255, 255, 0, 255, 255, 0]
+    );
+}
+
+#[test]
+fn channel_4_sets_the_ramp_time_for_channels_5_and_6() {
+    // README example 2: Channel 6 "Turn On; Instantly" while Channel 4 says "Turn On; 1000 ms".
+    let one_second = repeat(255, 1.0);
+    let leader = repeat(ON_1000, 1.0);
+    let show = show_with(&[
+        (Light::Channel4(Side::Left), &leader),
+        (Light::Channel6(Side::Left), &one_second),
+    ]);
+    for vehicle in [Vehicle::ModelS, Vehicle::ModelX, Vehicle::Model3Y] {
+        let track = track_of(&show, vehicle, Light::Channel6(Side::Left));
+        assert_eq!(track[24], 128, "{vehicle:?}: 50 % after 0.5 s");
+        assert_eq!(track[49], 255, "{vehicle:?}: 100 % after 1 s");
+    }
+
+    // README example 1: Channel 5 blinks while Channel 4 holds "Turn Off; 500 ms", so Channel 5
+    // ramps down over 500 ms after it is released.
+    let mut blink = repeat(255, 1.0);
+    blink.extend(repeat(0, 1.0));
+    let show = show_with(&[
+        (Light::Channel4(Side::Left), &repeat(OFF_500, 2.0)),
+        (Light::Channel5(Side::Left), &blink),
+    ]);
+    let track = track_of(&show, Vehicle::ModelS, Light::Channel5(Side::Left));
+    assert_eq!(track[49], 255);
+    assert_eq!(track[61], 133); // 52 % after 240 ms of ramping down
+    assert_eq!(track[74], 0);
+    // Model S/X keep individual on/off control: Channel 4 itself stays off.
+    assert!(
+        track_of(&show, Vehicle::ModelS, Light::Channel4(Side::Left))
+            .iter()
+            .all(|&v| v == 0)
+    );
+
+    // Without a Channel 4 effect the ramp is instant.
+    let show = show_with(&[(Light::Channel6(Side::Left), &[255])]);
+    assert_eq!(
+        track_of(&show, Vehicle::ModelX, Light::Channel6(Side::Left)),
+        [255]
+    );
+}
+
+#[test]
+fn model_3y_channels_4_to_6_are_one_output_per_side() {
+    let show = show_with(&[(Light::Channel6(Side::Left), &[255, 0])]);
+    for light in [
+        Light::Channel4(Side::Left),
+        Light::Channel5(Side::Left),
+        Light::Channel6(Side::Left),
+    ] {
+        assert_eq!(
+            track_of(&show, Vehicle::Model3Y, light),
+            [255, 0],
+            "{light:?}"
+        );
+    }
+    assert_eq!(
+        track_of(&show, Vehicle::Model3Y, Light::Channel4(Side::Right)),
+        [0, 0]
+    );
+}
+
+#[test]
+fn cybertruck_remapping() {
+    let name = |channel| Vehicle::Cybertruck.channel_name(channel);
+    assert_eq!(
+        name(Channel::Light(Light::Tail(Side::Left))),
+        "Left Reverse Light"
+    );
+    assert_eq!(
+        name(Channel::Light(Light::SideRepeater(Side::Right))),
+        "Right Rear Side Marker"
+    );
+    assert_eq!(
+        name(Channel::Light(Light::AuxPark(Side::Left))),
+        "Frunk Light"
+    );
+    assert_eq!(name(Channel::Light(Light::Reverse)), "Bed Lights");
+    assert_eq!(name(Channel::Closure(Closure::Liftgate)), "Powered Frunk");
+    assert_eq!(
+        Vehicle::ModelS.channel_name(Channel::Light(Light::Tail(Side::Left))),
+        "Left Tail"
+    );
+
+    // No Cybertruck light on these channels in Tesla's template.
+    for light in [
+        Light::FrontFog(Side::Left),
+        Light::RearFog,
+        Light::AuxPark(Side::Right),
+        Light::RearTurn(Side::Left),
+    ] {
+        assert_eq!(
+            Vehicle::Cybertruck.behavior(Channel::Light(light)),
+            Behavior::Absent,
+            "{light:?}"
+        );
+    }
+
+    // "Bed Lights always ramp on and off with a 500 ms duration, even with 'Turn on/off;
+    // Instant' effects."
+    let mut values = repeat(255, 1.0);
+    values.extend(repeat(0, 1.0));
+    let track = track_of(
+        &show_with(&[(Light::Reverse, &values)]),
+        Vehicle::Cybertruck,
+        Light::Reverse,
+    );
+    assert_eq!(track[11], 122); // 48 % after 240 ms
+    assert_eq!(track[24], 255);
+    assert_eq!(track[61], 133); // 52 % after 240 ms of ramping down
+    assert_eq!(track[74], 0);
+}

@@ -107,10 +107,33 @@ impl ClosureState {
     }
 }
 
+/// [`crate::Wiring`] resolved to channel indexes.
+#[derive(Debug, Clone)]
+struct Inputs {
+    sources: Vec<usize>,
+    ramp_from: usize,
+    fixed_ramp_ms: Option<u16>,
+}
+
+impl Inputs {
+    /// The command this light follows: sources combined with OR, ramp time from the leader.
+    fn command(&self, frame: &[u8]) -> LightCommand {
+        let on = self
+            .sources
+            .iter()
+            .any(|&i| LightCommand::from_byte(frame[i]).on);
+        let ramp_ms = self
+            .fixed_ramp_ms
+            .unwrap_or_else(|| LightCommand::from_byte(frame[self.ramp_from]).ramp_ms);
+        LightCommand { on, ramp_ms }
+    }
+}
+
 /// Simulates one vehicle, one frame at a time.
 #[derive(Debug, Clone)]
 pub struct Emulator {
     behaviors: Vec<Behavior>,
+    inputs: Vec<Inputs>,
     /// Output per channel in parts per million.
     levels: Vec<u32>,
     closures: Vec<Option<ClosureState>>,
@@ -124,6 +147,18 @@ impl Emulator {
             .map(|index| Channel::from_index(index, channel_count))
             .collect();
         let behaviors = channels.iter().map(|&c| vehicle.behavior(c)).collect();
+        let inputs = (0..channel_count)
+            .map(|index| {
+                let wiring = vehicle.wiring(channels[index]);
+                // A wired channel outside this file is never commanded, so it is skipped.
+                let resolve = |channel: Channel| channel.index().filter(|&i| i < channel_count);
+                Inputs {
+                    sources: wiring.sources.into_iter().filter_map(resolve).collect(),
+                    ramp_from: resolve(wiring.ramp_from).unwrap_or(index),
+                    fixed_ramp_ms: wiring.fixed_ramp_ms,
+                }
+            })
+            .collect();
         let closures = channels
             .iter()
             .map(|channel| match channel {
@@ -133,6 +168,7 @@ impl Emulator {
             .collect();
         Self {
             behaviors,
+            inputs,
             levels: vec![0; channel_count],
             closures,
         }
@@ -158,9 +194,9 @@ impl Emulator {
             match self.behaviors[index] {
                 Behavior::Absent => *level = 0,
                 Behavior::FullBrightness => *level = u32::from(value) * FULL / 255,
-                Behavior::Boolean => *level = bool_level(LightCommand::from_byte(value).on),
+                Behavior::Boolean => *level = bool_level(self.inputs[index].command(frame).on),
                 Behavior::Ramping => {
-                    let command = LightCommand::from_byte(value);
+                    let command = self.inputs[index].command(frame);
                     let target = bool_level(command.on);
                     if command.ramp_ms == 0 {
                         *level = target;
