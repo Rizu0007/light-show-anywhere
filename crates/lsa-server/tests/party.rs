@@ -295,6 +295,14 @@ async fn bad_uploads_are_rejected() {
     host.send_binary(b"not a show".to_vec()).await;
     host.expect("error").await;
 
+    // A header claiming billions of frames is refused before anything is decoded.
+    let mut huge = test_show();
+    huge[14..18].copy_from_slice(&u32::MAX.to_le_bytes());
+    host.send(json!({"t": "load", "vehicle": "model-3y", "name": "Huge"}))
+        .await;
+    host.send_binary(huge).await;
+    assert_eq!(host.expect("error").await["message"], "show is too long");
+
     host.send(json!({"t": "load", "vehicle": "bicycle", "name": "x"}))
         .await;
     host.send_binary(test_show()).await;

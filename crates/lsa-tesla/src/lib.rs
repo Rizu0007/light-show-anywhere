@@ -1,17 +1,6 @@
-//! Tesla light-show semantics: what each channel controls and how each vehicle responds.
-//!
-//! Everything here follows Tesla's public documentation and template
-//! (<https://github.com/teslamotors/light-show>):
-//!
-//! - [`Channel`]: the 200-channel map (lights, closures, Cybertruck light bars, interior RGB).
-//! - [`Vehicle`] and [`Behavior`]: which lights switch, ramp, or dim on each model.
-//! - [`LightCommand`] and [`ClosureCommand`]: what a channel byte means.
-//! - [`render`]: emulates a whole show and stores each channel's output per frame.
-//! - [`closure_usage`]: checks Tesla's per-show closure command limits.
-//! - [`Vehicle::wiring`]: channels the vehicle ORs into one light (aux park / side markers,
-//!   channels 4–6 on Model 3/Y) and channel 4 setting the ramp time for channels 5–6.
-//! - [`Vehicle::channel_name`]: Cybertruck's remapped lights (tail → reverse lights, reverse →
-//!   bed lights, …).
+//! Tesla light-show semantics from Tesla's docs and template
+//! (<https://github.com/teslamotors/light-show>): the [`Channel`] map, per-[`Vehicle`] behaviour,
+//! byte commands, and [`render`], which emulates a whole show.
 //!
 //! ```
 //! use lsa_fseq::Sequence;

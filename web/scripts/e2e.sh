@@ -1,13 +1,6 @@
 #!/usr/bin/env bash
-# Every browser test, as CI runs them: starts lsa-server and the dev server, runs the party test
-# (plain, with a dropped phone, then over HTTPS), the calibration and wake-lock tests, and stops
-# both.
-#
-#   ../scripts/fetch-tesla-example.sh   # once: the show the party test plays
-#   npm run wasm                        # once: the engine the dev server loads
-#   scripts/e2e.sh
-#
-# Ports 8787 and 5173 must be free. CHROME and CHROME_FLAGS select the browser (see chrome.mjs).
+# Every browser test, as CI runs them; starts and stops both servers (ports 8787 and 5173).
+# Once first: ../scripts/fetch-tesla-example.sh and npm run wasm.
 set -euo pipefail
 
 web="$(cd "$(dirname "$0")/.." && pwd)"

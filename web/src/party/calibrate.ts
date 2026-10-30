@@ -1,12 +1,6 @@
 /**
- * Speaker calibration in the browser: the host plays tones at agreed times on the shared clock,
- * and phones record them and work out how late they arrived (see chirp.ts).
- *
- * Both sides convert between the shared clock and the Web Audio clock the same way, so the
- * measured delay is everything between "the song should be here now" and "people hear it":
- * the computer's audio output, the speaker (Bluetooth adds 100–300 ms) and the distance. The
- * phone's own microphone delay (usually a few to tens of milliseconds) is not visible to the
- * browser and is included too.
+ * Speaker calibration: the host plays tones at shared-clock times; phones record them and measure
+ * how late they arrive (audio output + speaker + distance + the phone's own mic delay).
  */
 
 import { CHIRP_MS, MAX_DELAY_MS, chirp, findDelay } from "./chirp";
@@ -19,19 +13,10 @@ export interface CalibrationRequest {
   gapMs: number;
 }
 
-/**
- * Seconds an audio context must have run before its clock is trusted. Measured on a context
- * that had just started, calibrations came out up to 8 ms off; after 0.5 s still up to 5 ms;
- * after 2 s within one render block (calibrate-e2e). The phone's context and the host's are
- * made when joining and starting the party, so this only waits if calibration follows at once.
- */
+/** A just-started audio clock runs unevenly (up to 8 ms off); after 2 s it is within a block. */
 const WARM_UP_S = 2;
 
-/**
- * `performance.now()` minus the audio clock, in milliseconds. The audio clock only moves when
- * a block is rendered, so the smallest difference seen is closest to the render moment; the
- * result can still be one render block (128 samples, 2.7 ms at 48 kHz) off.
- */
+/** `performance.now()` minus the audio clock (ms): the smallest difference seen, ± one block. */
 async function audioOffset(ctx: AudioContext): Promise<number> {
   while (ctx.currentTime < WARM_UP_S) await new Promise((resolve) => setTimeout(resolve, 10));
   let best = Infinity;
@@ -82,10 +67,7 @@ registerProcessor("lsa-recorder", Recorder);
 
 const loadedRecorders = new WeakSet<AudioContext>();
 
-/**
- * Phone: records the tones and returns how late they arrived in milliseconds, or `null` if
- * they were not heard (or the microphone is unavailable).
- */
+/** Phone: how late the tones arrived (ms), or `null` if not heard or no microphone. */
 export async function listenForTones(
   ctx: AudioContext,
   serverNow: () => number,

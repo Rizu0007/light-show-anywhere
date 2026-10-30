@@ -1,16 +1,11 @@
 /**
- * Estimates the server clock from WebSocket ping/pong.
+ * Estimates the server clock from ping/pong: keeps the lowest-round-trip sample and slews towards
+ * it, so corrections never jump.
  *
  * Ported from Crowd Light Show's public/clocksync.js
  * (https://github.com/AndriiShramko/crowd-light-show), Copyright 2026 Andrii Shramko,
  * Apache License 2.0 (licenses/Apache-2.0.txt). Modified: TypeScript class, ping loop in
  * startClockSync(), telemetry removed. See NOTICE.
- * - keep the round with the lowest round-trip time from a rolling window: it suffered the least
- *   queueing, so its offset is the most trustworthy;
- * - only report `ready` once enough clean, stable samples exist; on a bad network fall back to a
- *   best-effort estimate after a while instead of staying dark forever;
- * - slew the applied offset towards new estimates so corrections never cause visible jumps;
- * - start over after the tab was in the background (its clock may have frozen).
  */
 
 const WINDOW = 40;

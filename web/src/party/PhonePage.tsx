@@ -87,7 +87,12 @@ export function PhonePage() {
   const awakeRef = useRef<boolean | null>(null);
   const cleanup = useRef<(() => void)[]>([]);
 
-  useEffect(() => () => cleanup.current.forEach((fn) => fn()), []);
+  /** Closes the connection and stops everything the join started (clock sync, wake lock…). */
+  const endSession = () => {
+    cleanup.current.forEach((fn) => fn());
+    cleanup.current = [];
+  };
+  useEffect(() => endSession, []);
 
   // Development: ?autojoin=1 joins without a tap (used by scripts/party-e2e.mjs).
   // Deferred: React's development mode mounts, unmounts and mounts again at once, and the unmount
@@ -210,11 +215,11 @@ export function PhonePage() {
             setMessage(msg.message);
             if (msg.message.includes("ended")) {
               saveToken(code, null);
-              conn.close();
+              endSession();
               setStatus("ended");
             } else if (msg.message.includes("not found")) {
-              // Wrong code: close this connection and let the user try again.
-              conn.close();
+              // Wrong code: let the user try again.
+              endSession();
               joining.current = false;
               setStatus("intro");
             }

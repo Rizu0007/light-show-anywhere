@@ -1,13 +1,6 @@
-//! HTTPS for the party server.
-//!
-//! Phones only keep the screen awake and open the flashlight on secure pages, so a real party
-//! needs HTTPS. A LAN has no domain name for a trusted certificate, so by default the server makes
-//! its own (self-signed) certificate for this computer's network addresses. Each phone shows a
-//! warning once and the guest continues past it.
-//!
-//! The certificate is kept in a folder and reused, so phones that accepted it are not warned
-//! again. It is replaced when this computer has a network address it does not cover (the old
-//! addresses stay in, so moving between known networks keeps it) or when it nears expiry.
+//! HTTPS, which phones need for the wake lock and flashlight. By default a self-signed
+//! certificate for this computer's network addresses, kept and reused so phones warn only once;
+//! renewed for a new address (old ones stay in) or near expiry.
 
 use std::collections::BTreeSet;
 use std::io;
@@ -89,7 +82,7 @@ fn local_names() -> BTreeSet<String> {
 }
 
 /// Loads the self-signed certificate in `dir`, or makes a new one when it does not cover
-/// `names` or expires within [`RENEW_DAYS`].
+/// `names` or expires within 30 days.
 pub fn self_signed(dir: &Path, names: &BTreeSet<String>) -> io::Result<Pem> {
     let now = OffsetDateTime::now_utc();
     if let Some((expires, covered)) = read_info(dir)

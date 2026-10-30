@@ -1,7 +1,6 @@
 /**
- * Keeps the screen awake where supported (needs HTTPS). The browser drops the lock whenever the
- * page is hidden (screen locked, another app), so it is taken again each time the page comes
- * back. `onChange` hears whether the screen is kept awake (`null`: this browser cannot).
+ * Keeps the screen awake (needs HTTPS), taking the lock again whenever the page comes back:
+ * browsers drop it while hidden. `onChange` gets true/false, or `null` if unsupported.
  */
 export function keepAwake(onChange: (awake: boolean | null) => void): () => void {
   if (!("wakeLock" in navigator)) {

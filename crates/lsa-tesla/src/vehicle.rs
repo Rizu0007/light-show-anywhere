@@ -1,13 +1,5 @@
-//! How each vehicle responds to each channel.
-//!
-//! From the "Light Channels with Brightness Control", "Closures channels" and "Light channel
-//! mapping details" sections of Tesla's README, and the Cybertruck models in Tesla's xLights
-//! template. Outer main beams are modelled as LED reflector headlights (ramping); vehicles with
-//! LED projector headlights switch them on and off instantly instead.
-//!
-//! Not modelled: Model 3 built before October 2020 (tail and license plate lights on one
-//! output), and regional or trim differences (side markers only in North America, no fog
-//! lights on Model 3 Standard Range +).
+//! How each vehicle responds to each channel, from Tesla's README and xLights template. Outer
+//! main beams ramp (LED reflector). Not modelled: pre-Oct-2020 Model 3, regional/trim differences.
 
 use crate::channel::{Channel, Closure, Light, Side};
 
@@ -64,6 +56,18 @@ impl Vehicle {
     /// Every supported vehicle.
     pub const ALL: [Self; 4] = [Self::ModelS, Self::ModelX, Self::Model3Y, Self::Cybertruck];
 
+    /// The vehicle named by `id`: `model-s`, `model-x`, `model-3y` or `cybertruck`.
+    #[must_use]
+    pub fn from_id(id: &str) -> Option<Self> {
+        match id {
+            "model-s" => Some(Self::ModelS),
+            "model-x" => Some(Self::ModelX),
+            "model-3y" => Some(Self::Model3Y),
+            "cybertruck" => Some(Self::Cybertruck),
+            _ => None,
+        }
+    }
+
     /// How this vehicle handles `channel`.
     #[must_use]
     pub fn behavior(self, channel: Channel) -> Behavior {
@@ -117,11 +121,8 @@ impl Vehicle {
         }
     }
 
-    /// Which channels drive the light on `channel`, and where its ramp time comes from.
-    ///
-    /// Several channels can share one physical output (Tesla ORs their on/off state), and on
-    /// channels 4–6 the ramp time always comes from channel 4. Every channel of a shared output
-    /// gets the same wiring, so they all show the same level.
+    /// Which channels drive the light on `channel` (shared outputs OR them) and which sets its
+    /// ramp time. Every channel of a shared output gets the same wiring.
     #[must_use]
     pub fn wiring(self, channel: Channel) -> Wiring {
         let Channel::Light(light) = channel else {

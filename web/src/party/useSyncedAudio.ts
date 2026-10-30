@@ -4,12 +4,7 @@ import type { HostParty } from "./useHost";
 const CHECK_EVERY_MS = 500;
 const MAX_DRIFT_MS = 80;
 
-/**
- * Plays the host's song on the shared clock while a party runs.
- *
- * `speakerDelayMs` starts the song that much earlier, so sound from a slow (e.g. Bluetooth)
- * speaker reaches people at the same moment the phones light up.
- */
+/** Plays the host's song on the shared clock, `speakerDelayMs` early to make up for the speaker. */
 export function useSyncedAudio(
   audio: RefObject<HTMLAudioElement | null>,
   party: HostParty,

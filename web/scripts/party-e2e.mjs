@@ -1,16 +1,7 @@
 #!/usr/bin/env node
-// End-to-end party test: a scripted host plus real headless-Chrome phones.
-//
-// Needs `cargo run -p lsa-server` and `npm run dev` running. Usage:
+// Party test: a host bot and headless-Chrome phones on one light; checks each light change against
+// the track's frame times. Needs lsa-server and `npm run dev`. DROP=1 cuts phone 1 mid-show.
 //   node scripts/party-e2e.mjs <show.fseq> [channel] [seconds]
-// Over HTTPS (`lsa-server --tls` and `npm run dev:https`): APP=https://localhost:5173 node ...
-// DROP=1 cuts phone 1's connection halfway through; it must reconnect, take its place back and
-// keep every light change in time.
-//
-// The host bot creates a room, uploads the show, pins every phone to the same light and plays.
-// Each phone records when its light crosses half brightness on the shared clock; the script
-// compares those moments with the frame timing of the track the phone received (the show after
-// the safety governor) and with each other.
 
 import { readFileSync } from "node:fs";
 import { chromeSession, sleep, until } from "./chrome.mjs";

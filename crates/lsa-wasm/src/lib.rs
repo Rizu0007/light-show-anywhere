@@ -115,11 +115,5 @@ pub fn channel_name(index: usize, channel_count: usize, vehicle: Option<String>)
 }
 
 fn parse_vehicle(name: &str) -> Result<Vehicle, JsError> {
-    match name {
-        "model-s" => Ok(Vehicle::ModelS),
-        "model-x" => Ok(Vehicle::ModelX),
-        "model-3y" => Ok(Vehicle::Model3Y),
-        "cybertruck" => Ok(Vehicle::Cybertruck),
-        other => Err(JsError::new(&format!("unknown vehicle: {other}"))),
-    }
+    Vehicle::from_id(name).ok_or_else(|| JsError::new(&format!("unknown vehicle: {name}")))
 }

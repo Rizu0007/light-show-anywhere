@@ -1,14 +1,6 @@
-//! Frame-by-frame emulation of how a vehicle responds to a sequence.
-//!
-//! Light rules (Tesla README, "Ramping light channels"):
-//! - A ramp moves brightness towards 0 % or 100 % at a fixed rate: full range in the ramp
-//!   duration. It cannot hold a level in between.
-//! - A new command takes over immediately from the current brightness, so ramps can stop early
-//!   or reverse.
-//!
-//! Closure positions are approximations for previews: travel times come from Tesla's table, and
-//! Dance is drawn as a 1-second swing between two positions, since Tesla does not publish the
-//! exact dance positions.
+//! Frame-by-frame emulation. Ramps move towards 0 % or 100 % at a fixed rate and a new command
+//! takes over from the current level (Tesla README). Closure positions and Dance are preview
+//! approximations; Tesla publishes only travel times.
 
 use core::f32::consts::TAU;
 use core::time::Duration;

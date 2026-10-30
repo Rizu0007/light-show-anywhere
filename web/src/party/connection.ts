@@ -88,16 +88,12 @@ const RETRY_MAX_MS = 5000;
 /** Clock sync replies arrive every 2 s; this long without any message means the link is dead. */
 const SILENT_MS = 7000;
 
-/** A random 50–150% of `ms`. When the Wi-Fi drops, a whole crowd loses the server together; at
- *  fixed delays they would all reconnect in the same instant, and connections beyond the
- *  server's queue (128 on macOS) wait seconds for TCP to retry (lsa-server's load test). */
+/** A random 50–150% of `ms`, so a crowd that lost Wi-Fi together does not reconnect at once. */
 const jittered = (ms: number) => ms * (0.5 + Math.random());
 
 /**
- * Opens the party connection and keeps it open: after a drop it reconnects with backoff, and at
- * once when the page becomes visible again or the device comes back online (phones drop
- * sockets while the screen is locked). `onOpen` runs on every (re)connect, `onClose` on every
- * drop.
+ * Opens the party connection and keeps it open: reconnects with jittered backoff, at once when the
+ * page becomes visible again. `onOpen` runs on every (re)connect, `onClose` on every drop.
  */
 export function connect(handlers: {
   onOpen: () => void;

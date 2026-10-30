@@ -1,9 +1,6 @@
 #!/usr/bin/env node
-// Keeping the phone's screen awake, in real headless Chrome with a stand-in wake lock (a
-// headless page has no screen to lock): the lock is taken on join, dropped by the browser when
-// the screen locks, taken again when the page comes back (once, however many events arrive),
-// and released on leaving. Needs `npm run dev` running. Usage:
-//   node scripts/wake-lock-e2e.mjs
+// Wake lock in headless Chrome with a stand-in lock: taken on join, again after a screen lock
+// (once), released on leaving. Needs `npm run dev`.
 
 import { chromeSession } from "./chrome.mjs";
 

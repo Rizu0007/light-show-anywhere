@@ -1,21 +1,7 @@
-//! Photosensitive-epilepsy safety governor for phone light tracks.
-//!
-//! A phone screen held up in a dark crowd fills much of the view, so WCAG 2.3.1's small-area
-//! exemption never applies: the rule that remains is "no more than three flashes in any one
-//! second". Tesla shows strobe much faster than that, so every track is rewritten before it is
-//! sent to a phone:
-//!
-//! - brightness never changes faster than full range in [`MIN_RAMP_MS`];
-//! - once [`MAX_FLASHES_PER_SECOND`] flashes have happened in the last second, the light holds
-//!   its level until another flash is allowed.
-//!
-//! A flash is a pair of opposing changes in relative luminance of at least 10 % where the darker
-//! state is below 0.80 (WCAG's "general flash"). Every colour is treated as white, so changes
-//! on red lights count as flashes too (WCAG's "red flash" rule). The limits follow Crowd Light
-//! Show's governor (<https://github.com/AndriiShramko/crowd-light-show>).
-//!
-//! Tracks are governed separately, so phones playing different lights out of step can still
-//! add up to more flashing across the crowd than one phone shows.
+//! Photosensitive-epilepsy governor (WCAG 2.3.1): every phone track ramps no faster than
+//! [`MIN_RAMP_MS`] and flashes at most [`MAX_FLASHES_PER_SECOND`] times a second. A flash is a
+//! pair of opposing luminance changes of ≥ 10 % with the darker end below 0.80; every colour
+//! counts as white (WCAG's red-flash rule). Tracks are governed one at a time, not as a crowd.
 
 use std::collections::VecDeque;
 
