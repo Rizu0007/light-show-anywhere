@@ -67,6 +67,11 @@ const RETRY_MAX_MS = 5000;
 /** Clock sync replies arrive every 2 s; this long without any message means the link is dead. */
 const SILENT_MS = 7000;
 
+/** A random 50–150% of `ms`. When the Wi-Fi drops, a whole crowd loses the server together; at
+ *  fixed delays they would all reconnect in the same instant, and connections beyond the
+ *  server's queue (128 on macOS) wait seconds for TCP to retry (lsa-server's load test). */
+const jittered = (ms: number) => ms * (0.5 + Math.random());
+
 /**
  * Opens the party connection and keeps it open: after a drop it reconnects with backoff, and at
  * once when the page becomes visible again or the device comes back online (phones drop
@@ -111,7 +116,7 @@ export function connect(handlers: {
       ws = null;
       if (closed) return;
       handlers.onClose();
-      retryTimer = window.setTimeout(open, Math.min(RETRY_MAX_MS, RETRY_MS * 2 ** retries++));
+      retryTimer = window.setTimeout(open, jittered(Math.min(RETRY_MAX_MS, RETRY_MS * 2 ** retries++)));
     };
   };
 
@@ -128,8 +133,15 @@ export function connect(handlers: {
     retries = 0;
     open();
   };
+  // Every phone hears "online" when the Wi-Fi comes back, so spread those retries out.
+  const retrySoon = () => {
+    if (ws) return;
+    retries = 0;
+    clearTimeout(retryTimer);
+    retryTimer = window.setTimeout(open, jittered(RETRY_MS));
+  };
   document.addEventListener("visibilitychange", retryNow);
-  window.addEventListener("online", retryNow);
+  window.addEventListener("online", retrySoon);
   // Development: lets scripts/party-e2e.mjs cut the connection.
   if (import.meta.env.DEV) devHooks.__lsaDrop = () => ws?.close();
   open();
@@ -151,7 +163,7 @@ export function connect(handlers: {
       clearTimeout(retryTimer);
       clearInterval(watchdog);
       document.removeEventListener("visibilitychange", retryNow);
-      window.removeEventListener("online", retryNow);
+      window.removeEventListener("online", retrySoon);
       ws?.close();
       ws = null;
     },

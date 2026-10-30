@@ -18,7 +18,7 @@ pub mod tls;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
@@ -38,6 +38,9 @@ use crate::room::{MAX_SHOW_BYTES, MemberId, Outgoing, Rooms};
 /// a locked screen or a Wi-Fi switch.
 pub const RESUME_GRACE: Duration = Duration::from_secs(120);
 
+/// Hosts get at most one roster per this interval, with every change since the last one.
+pub const ROSTER_INTERVAL: Duration = Duration::from_millis(200);
+
 /// Shared server state.
 #[derive(Debug)]
 pub struct AppState {
@@ -45,6 +48,8 @@ pub struct AppState {
     started: Instant,
     next_id: AtomicU64,
     resume_grace: Duration,
+    /// A roster flush is waiting to run.
+    roster_flush: AtomicBool,
 }
 
 impl Default for AppState {
@@ -62,6 +67,7 @@ impl AppState {
             started: Instant::now(),
             next_id: AtomicU64::new(1),
             resume_grace: grace,
+            roster_flush: AtomicBool::new(false),
         }
     }
 
@@ -74,6 +80,21 @@ impl AppState {
     fn rooms(&self) -> std::sync::MutexGuard<'_, Rooms> {
         // A panic while holding the lock leaves rooms usable; keep serving.
         self.rooms.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+
+    /// Sends owed rosters after [`ROSTER_INTERVAL`], unless a send is already waiting (it will
+    /// include this change).
+    fn schedule_rosters(self: &Arc<Self>) {
+        if !self.rooms().rosters_due() || self.roster_flush.swap(true, Ordering::AcqRel) {
+            return;
+        }
+        let state = Arc::clone(self);
+        tokio::spawn(async move {
+            tokio::time::sleep(ROSTER_INTERVAL).await;
+            // Cleared first: a change made during the flush schedules the next one.
+            state.roster_flush.store(false, Ordering::Release);
+            state.rooms().flush_rosters();
+        });
     }
 }
 
@@ -187,6 +208,14 @@ async fn connection(socket: WebSocket, state: Arc<AppState>) {
     while let Some(Ok(message)) = stream.next().await {
         match message {
             Message::Text(text) => match serde_json::from_str::<ClientMsg>(&text) {
+                // The most frequent message, and it never changes a room.
+                Ok(ClientMsg::Sync { c0 }) => {
+                    let _ = tx.send(Outgoing::Text(ServerMsg::Sync {
+                        c0,
+                        s1: state.now_ms(),
+                    }));
+                    continue;
+                }
                 Ok(ClientMsg::Load { vehicle, name }) => {
                     pending = Some(PendingLoad { vehicle, name });
                 }
@@ -222,18 +251,21 @@ async fn connection(socket: WebSocket, state: Arc<AppState>) {
             Message::Close(_) => break,
             Message::Ping(_) | Message::Pong(_) => {}
         }
+        state.schedule_rosters();
     }
 
     // Keep the place for a while in case the phone or host comes back. The room still holds a
     // sender for this connection, so stop the writer rather than wait for it; messages sent to
     // an offline place are then dropped.
     let epoch = state.rooms().disconnect(id, &tx);
+    state.schedule_rosters();
     writer.abort();
     // Close the socket now; the browser waits for that before it reconnects.
     drop(stream);
     if let Some(epoch) = epoch {
         tokio::time::sleep(state.resume_grace).await;
         state.rooms().expire(id, epoch);
+        state.schedule_rosters();
     }
 }
 
@@ -245,10 +277,6 @@ fn handle(
 ) {
     let now = state.now_ms();
     let result = match command {
-        ClientMsg::Sync { c0 } => {
-            let _ = tx.send(Outgoing::Text(ServerMsg::Sync { c0, s1: now }));
-            Ok(())
-        }
         ClientMsg::Create => {
             state.rooms().create(id, tx.clone());
             Ok(())
@@ -264,7 +292,7 @@ fn handle(
             state.rooms().leave(id);
             Ok(())
         }
-        ClientMsg::Load { .. } | ClientMsg::Resume { .. } => {
+        ClientMsg::Sync { .. } | ClientMsg::Load { .. } | ClientMsg::Resume { .. } => {
             unreachable!("handled by the connection loop")
         }
     };

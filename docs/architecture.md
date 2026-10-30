@@ -7,14 +7,14 @@
             │  lsa-fseq  │  parse / write / Tesla rules
             └─────┬──────┘
             ┌─────▼──────┐
-            │ lsa-engine │  playback clock, frame at time t, beat detection
+            │ lsa-tesla  │  channel map, ramp/closure emulation, render to per-frame levels
             └──┬──────┬──┘
      ┌─────────▼┐   ┌─▼──────────┐
-     │ lsa-wasm │   │ lsa-server │  rooms, light roles, clock sync (WebSocket)
+     │ lsa-wasm │   │ lsa-server │  rooms, light roles, clock sync, safety governor (WebSocket)
      └────┬─────┘   └─────┬──────┘
           │ browser        │ network
      ┌────▼────────────────▼────┐
-     │ web app (React + WebGPU) │  car view, phone light, host controls
+     │  web app (React + SVG)   │  car view, phone light, host controls, calibration
      └──────────────────────────┘
 ```
 

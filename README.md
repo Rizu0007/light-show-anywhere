@@ -54,6 +54,12 @@ gets its light back when it returns, and keeps playing on its own meanwhile. If 
 drops, phones keep playing and the host takes the room back when it reconnects. A place is kept
 for 2 minutes; **End party** closes the room at once.
 
+How many phones? The server is not the limit: in its load test one laptop serves 2000 phones,
+which all get their light within 0.7 s of joining together, hear about **Play** within 25 ms
+(the show starts 1 s after the press) and are all back 0.8 s after a Wi-Fi blip. The Wi-Fi is the
+limit: home routers often struggle beyond a few dozen devices, so for a big crowd use a router
+or access points built for many clients.
+
 The certificate is reused, so phones are not warned again. It is renewed (and phones warn once
 more) when the computer joins a network it does not cover yet, or a month before it expires. With
 a real certificate for a domain, use `--cert cert.pem --key key.pem` instead of `--tls`.
@@ -79,6 +85,13 @@ cd web && DROP=1 node scripts/party-e2e.mjs ../shows/<show>.fseq
 # speaker calibration (needs only `npm run dev`): detector on synthetic recordings, then the
 # whole browser pipeline with the tones wired into a fake microphone through a known delay
 cd web && node scripts/chirp-test.mjs && node scripts/calibrate-e2e.mjs
+```
+
+Load test: one host and many simulated phones join at once, play, load the next song and all
+reconnect after a Wi-Fi blip (200 phones in `cargo test`; more with `LSA_LOAD_PHONES`):
+
+```bash
+LSA_LOAD_PHONES=2000 cargo test --release -p lsa-server --test load -- --nocapture
 ```
 
 ## Requirements

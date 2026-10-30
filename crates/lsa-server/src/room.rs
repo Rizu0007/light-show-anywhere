@@ -124,6 +124,8 @@ struct Room {
     members: BTreeMap<MemberId, Member>,
     show: Option<LoadedShow>,
     playback: Playback,
+    /// The phones changed since the host's last roster (see [`Rooms::flush_rosters`]).
+    roster_due: bool,
 }
 
 /// Every room on this server.
@@ -157,6 +159,7 @@ impl Rooms {
                 members: BTreeMap::new(),
                 show: None,
                 playback: Playback::Paused { position_ms: 0.0 },
+                roster_due: false,
             },
         );
         self.membership.insert(host, code.clone());
@@ -203,7 +206,7 @@ impl Rooms {
 
         room.assign_unpinned();
         room.send_state(id);
-        room.send_roster();
+        room.roster_due = true;
         Ok(())
     }
 
@@ -241,7 +244,7 @@ impl Rooms {
             send(&room.members[&id].session.tx, resumed);
             room.send_state(id);
         }
-        room.send_roster();
+        room.roster_due = true;
         Some(id)
     }
 
@@ -254,7 +257,7 @@ impl Rooms {
             room.host_session.disconnect(tx)
         } else {
             let epoch = room.members.get_mut(&id)?.session.disconnect(tx)?;
-            room.send_roster();
+            room.roster_due = true;
             Some(epoch)
         }
     }
@@ -301,7 +304,7 @@ impl Rooms {
                 );
             }
         } else if room.members.remove(&id).is_some() {
-            room.send_roster();
+            room.roster_due = true;
         }
     }
 
@@ -351,7 +354,7 @@ impl Rooms {
             room.send_role(id);
         }
         room.broadcast_playback();
-        room.send_roster();
+        room.roster_due = true;
         Ok(())
     }
 
@@ -455,8 +458,25 @@ impl Rooms {
         // Only this phone changes; the others keep their lights.
         room.assign_unpinned();
         room.send_role(member);
-        room.send_roster();
+        room.roster_due = true;
         Ok(())
+    }
+
+    /// Whether any host is owed a roster.
+    #[must_use]
+    pub fn rosters_due(&self) -> bool {
+        self.by_code.values().any(|room| room.roster_due)
+    }
+
+    /// Sends each host whose phones changed one roster with the current state. Rosters are
+    /// batched like this because with a big crowd one per change would swamp the host's
+    /// browser: after a Wi-Fi blip, 1000 phones dropping and coming back meant 2000 rosters
+    /// (114 MB).
+    pub fn flush_rosters(&mut self) {
+        for room in self.by_code.values_mut().filter(|room| room.roster_due) {
+            room.roster_due = false;
+            room.send_roster();
+        }
     }
 
     /// Number of open rooms.
