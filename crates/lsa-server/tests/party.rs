@@ -150,8 +150,7 @@ async fn room_codes_and_bad_joins() {
 
     let mut phone = Client::connect(&url).await;
     phone.send(json!({"t": "join", "room": "ZZZZ"})).await;
-    let error = phone.expect("error").await;
-    assert!(error["message"].as_str().unwrap().contains("not found"));
+    assert_eq!(phone.expect("noRoom").await["room"], "ZZZZ");
 
     // Codes are case-insensitive; before a show loads the phone has no light yet.
     phone
@@ -323,8 +322,7 @@ async fn phones_are_told_when_the_host_ends_the_party() {
     phone.expect("playback").await;
 
     host.send(json!({"t": "leave"})).await;
-    let error = phone.expect("error").await;
-    assert!(error["message"].as_str().unwrap().contains("ended"));
+    phone.expect("ended").await;
 }
 
 #[tokio::test]
@@ -337,8 +335,7 @@ async fn party_ends_when_a_dropped_host_does_not_come_back() {
 
     let dropped = std::time::Instant::now();
     drop(host);
-    let error = phone.expect("error").await;
-    assert!(error["message"].as_str().unwrap().contains("ended"));
+    phone.expect("ended").await;
     assert!(dropped.elapsed() >= GRACE);
 }
 

@@ -298,7 +298,8 @@ impl Rooms {
         code
     }
 
-    /// Adds a phone to a room and sends it everything it needs to start playing.
+    /// Adds a phone to a room and sends it everything it needs to start playing, or tells it
+    /// there is no such room.
     pub fn join(
         &mut self,
         id: MemberId,
@@ -307,15 +308,16 @@ impl Rooms {
         tx: UnboundedSender<Outgoing>,
     ) -> Result<(), String> {
         let code = code.trim().to_ascii_uppercase();
-        let not_found = || format!("room {code} not found");
         if !self.by_code.contains_key(&code) {
-            return Err(not_found());
+            send(&tx, ServerMsg::NoRoom { room: code });
+            return Ok(());
         }
         // Leaving first can close a room this connection was hosting, so look it up again.
         self.leave(id);
         let token = self.new_token();
         let Some(room) = self.by_code.get_mut(&code) else {
-            return Err(not_found());
+            send(&tx, ServerMsg::NoRoom { room: code });
+            return Ok(());
         };
         send(
             &tx,
@@ -430,12 +432,7 @@ impl Rooms {
             };
             for (member, phone) in room.members {
                 self.membership.remove(&member);
-                send(
-                    &phone.session.tx,
-                    ServerMsg::Error {
-                        message: "the host ended the party".into(),
-                    },
-                );
+                send(&phone.session.tx, ServerMsg::Ended);
             }
         } else if room.members.remove(&id).is_some() {
             room.roster_due = true;

@@ -13,7 +13,7 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # rust-toolchain.toml selects the exact version, components and wasm target.
       - run: rustup show active-toolchain || rustup toolchain install
       - uses: Swatinem/rust-cache@v2
@@ -37,12 +37,12 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup show active-toolchain || rustup toolchain install
       - uses: Swatinem/rust-cache@v2
       - name: Install wasm-pack
         run: cargo install wasm-pack --locked
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
@@ -56,7 +56,7 @@ jobs:
         run: node scripts/layout-test.mjs
       - name: Tesla example show (not stored in the repo)
         run: ../scripts/fetch-tesla-example.sh
-      - name: Browser tests (party, reconnect, layout, fleet, calibration, video, wake lock, HTTPS)
+      - name: Browser tests (party, reconnect, host reload, layout, fleet, calibration, video, wake lock, HTTPS)
         run: scripts/e2e.sh
         env:
           # Preinstalled on GitHub's Ubuntu runners; Ubuntu's AppArmor blocks Chrome's sandbox.

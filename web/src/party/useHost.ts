@@ -44,7 +44,8 @@ export interface HostParty {
   positionNow: () => number;
   /** Shared clock in milliseconds, or `null` before sync. */
   serverNow: () => number | null;
-  start: () => void;
+  /** Starts a party (from a click, which lets it prepare the speaker measurement). */
+  start: (fromClick?: boolean) => void;
   stop: () => void;
   /** Uploads a show: one `.fseq`, or one per car of a fleet show (car 1 first). */
   load: (files: Uint8Array<ArrayBuffer>[], vehicle: string, name: string) => void;
@@ -58,6 +59,43 @@ export interface HostParty {
   setLayout: (spots: Spot[]) => void;
   /** Plays calibration tones for phones with a microphone to measure (call from a click). */
   calibrate: () => void;
+}
+
+/** This tab's party, kept across reloads: the host takes the room back (lsa-server's resume)
+ *  without re-sending a show or layout the server already has (which would restart it). */
+const SESSION_KEY = "lsa-host-session";
+
+interface Session {
+  token: string;
+  /** Fingerprints of the show and layout the server has. */
+  show: string | null;
+  layout: string | null;
+}
+
+function loadSession(): Session | null {
+  try {
+    return JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? "null") as Session | null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSession(session: Session | null) {
+  try {
+    if (session) sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+    else sessionStorage.removeItem(SESSION_KEY);
+  } catch {
+    // Private mode: a reloaded tab starts a new party.
+  }
+}
+
+/** Identifies a show upload (FNV-1a over the files), to skip sending the same one again. */
+function fingerprint(files: Uint8Array[], vehicle: string, name: string): string {
+  let hash = 0x811c9dc5;
+  for (const file of files) {
+    for (let i = 0; i < file.length; i++) hash = Math.imul(hash ^ file[i], 0x01000193) >>> 0;
+  }
+  return `${vehicle}|${name}|${files.map((f) => f.length).join(",")}|${hash.toString(16)}`;
 }
 
 /** Hosts a party: owns the connection, the shared clock and the room's state. */
@@ -81,19 +119,37 @@ export function useHost(): HostParty {
   const pendingLoad = useRef<{ files: Uint8Array<ArrayBuffer>[]; vehicle: string; name: string } | null>(null);
   const needsUpload = useRef(false);
   const layout = useRef<Spot[]>([]);
-  const sendLayout = useCallback(() => conn.current?.send({ t: "layout", spots: layout.current }), []);
-  // Lets a dropped connection take the room back (see lsa-server's resume).
-  const token = useRef<string | null>(null);
+  // Lets a dropped connection or a reloaded tab take the room back.
+  const session = useRef<Session | null>(null);
+  const remember = () => saveSession(session.current);
+
+  const sendLayout = useCallback(() => {
+    const json = JSON.stringify(layout.current);
+    if (!session.current || session.current.layout === json) return;
+    if (conn.current?.send({ t: "layout", spots: layout.current })) {
+      session.current.layout = json;
+      remember();
+    }
+  }, []);
 
   const upload = useCallback(() => {
     const show = pendingLoad.current;
-    if (!show || !conn.current) return;
+    if (!show || !conn.current || !session.current) return;
+    const key = fingerprint(show.files, show.vehicle, show.name);
+    if (session.current.show === key) {
+      needsUpload.current = false;
+      return;
+    }
     // All cars in one frame, so phones are never dealt lights for half a fleet.
     const sizes = show.files.length > 1 ? show.files.map((f) => f.length) : [];
     const bytes = new Uint8Array(show.files.reduce((total, f) => total + f.length, 0));
     show.files.reduce((at, f) => (bytes.set(f, at), at + f.length), 0);
     const sent = conn.current.send({ t: "load", vehicle: show.vehicle, name: show.name, sizes });
     needsUpload.current = !(sent && conn.current.sendBinary(bytes));
+    if (!needsUpload.current) {
+      session.current.show = key;
+      remember();
+    }
   }, []);
 
   const stop = useCallback(() => {
@@ -102,7 +158,8 @@ export function useHost(): HostParty {
     // Ends the party for every phone now, instead of after the server's grace period.
     conn.current?.send({ t: "leave" });
     conn.current?.close();
-    token.current = null;
+    session.current = null;
+    remember();
     conn.current = null;
     clock.current = null;
     setActive(false);
@@ -112,17 +169,17 @@ export function useHost(): HostParty {
     setRoster([]);
   }, []);
 
-  const start = useCallback(() => {
+  const start = useCallback((fromClick = true) => {
     if (conn.current) return;
     setActive(true);
     setError(null);
     // Made on this click (browsers only start audio from one) rather than on Calibrate, so its
     // clock has settled by the time the speaker is measured (see calibrate.ts).
-    audioContext.current ??= new AudioContext();
+    if (fromClick) audioContext.current ??= new AudioContext();
     const connection = connect({
       onOpen: () => {
         setConnected(true);
-        connection.send(token.current ? { t: "resume", token: token.current } : { t: "create" });
+        connection.send(session.current ? { t: "resume", token: session.current.token } : { t: "create" });
       },
       onMessage: (msg: ServerMsg) => {
         switch (msg.t) {
@@ -131,7 +188,8 @@ export function useHost(): HostParty {
             setSynced(!!clock.current?.ready);
             break;
           case "created":
-            token.current = msg.token;
+            session.current = { token: msg.token, show: null, layout: null };
+            remember();
             setRoom(msg.room);
             setError(null);
             upload();
@@ -189,7 +247,26 @@ export function useHost(): HostParty {
     stopSync.current = startClockSync(sync);
   }, [upload, stop, sendLayout]);
 
-  useEffect(() => stop, [stop]);
+  // A reloaded tab takes its party back. Deferred: React's development mode mounts twice at once.
+  useEffect(() => {
+    const saved = loadSession();
+    if (!saved) return;
+    const timer = setTimeout(() => {
+      session.current = saved;
+      start(false);
+    });
+    return () => clearTimeout(timer);
+  }, [start]);
+
+  // Leaving the page only closes the connection; End party (`stop`) ends the party.
+  useEffect(
+    () => () => {
+      stopSync.current?.();
+      conn.current?.close();
+      conn.current = null;
+    },
+    [],
+  );
 
   const load = useCallback(
     (files: Uint8Array<ArrayBuffer>[], vehicle: string, name: string) => {

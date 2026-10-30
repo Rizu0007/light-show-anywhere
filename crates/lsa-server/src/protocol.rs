@@ -161,6 +161,13 @@ pub enum ServerMsg {
     },
     /// The token is unknown: the place was given up or the room closed. Join or create again.
     Expired,
+    /// Phones: the host ended the party (or did not come back in time).
+    Ended,
+    /// No room has this code.
+    NoRoom {
+        /// The code asked for.
+        room: String,
+    },
     /// The room's current show.
     Show {
         /// Increases every time a new show is loaded.

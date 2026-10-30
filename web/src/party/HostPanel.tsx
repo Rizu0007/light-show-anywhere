@@ -76,7 +76,7 @@ export function HostPanel({ party, hasShow, cars, layout, nameOf, speakerDelayMs
             times a second, so fast strobes look calmer than in the preview above.
           </p>
         </div>
-        <button onClick={party.start} disabled={!hasShow}>
+        <button onClick={() => party.start()} disabled={!hasShow}>
           Start party
         </button>
       </section>
