@@ -6,6 +6,7 @@ import { connect, type Connection, type PhoneHealth, type ServerMsg } from "./co
 export interface RosterMember {
   id: number;
   name: string | null;
+  car: number | null;
   channel: number | null;
   /** False while the phone is away (it keeps its light for a couple of minutes). */
   online: boolean;
@@ -42,11 +43,12 @@ export interface HostParty {
   serverNow: () => number | null;
   start: () => void;
   stop: () => void;
-  load: (bytes: Uint8Array<ArrayBuffer>, vehicle: string, name: string) => void;
+  /** Uploads a show: one `.fseq`, or one per car of a fleet show (car 1 first). */
+  load: (files: Uint8Array<ArrayBuffer>[], vehicle: string, name: string) => void;
   play: (positionMs: number) => void;
   pause: () => void;
   seek: (positionMs: number) => void;
-  assign: (member: number, channel: number | null) => void;
+  assign: (member: number, car: number, channel: number | null) => void;
   /** Plays calibration tones for phones with a microphone to measure (call from a click). */
   calibrate: () => void;
 }
@@ -69,7 +71,7 @@ export function useHost(): HostParty {
   const playbackRef = useRef(playback);
   // The latest show; uploaded when the room is created, and again after a reconnect if it was
   // loaded while offline.
-  const pendingLoad = useRef<{ bytes: Uint8Array<ArrayBuffer>; vehicle: string; name: string } | null>(null);
+  const pendingLoad = useRef<{ files: Uint8Array<ArrayBuffer>[]; vehicle: string; name: string } | null>(null);
   const needsUpload = useRef(false);
   // Lets a dropped connection take the room back (see lsa-server's resume).
   const token = useRef<string | null>(null);
@@ -77,8 +79,12 @@ export function useHost(): HostParty {
   const upload = useCallback(() => {
     const show = pendingLoad.current;
     if (!show || !conn.current) return;
-    const sent = conn.current.send({ t: "load", vehicle: show.vehicle, name: show.name });
-    needsUpload.current = !(sent && conn.current.sendBinary(show.bytes));
+    // All cars in one frame, so phones are never dealt lights for half a fleet.
+    const sizes = show.files.length > 1 ? show.files.map((f) => f.length) : [];
+    const bytes = new Uint8Array(show.files.reduce((total, f) => total + f.length, 0));
+    show.files.reduce((at, f) => (bytes.set(f, at), at + f.length), 0);
+    const sent = conn.current.send({ t: "load", vehicle: show.vehicle, name: show.name, sizes });
+    needsUpload.current = !(sent && conn.current.sendBinary(bytes));
   }, []);
 
   const stop = useCallback(() => {
@@ -175,8 +181,8 @@ export function useHost(): HostParty {
   useEffect(() => stop, [stop]);
 
   const load = useCallback(
-    (bytes: Uint8Array<ArrayBuffer>, vehicle: string, name: string) => {
-      pendingLoad.current = { bytes, vehicle, name };
+    (files: Uint8Array<ArrayBuffer>[], vehicle: string, name: string) => {
+      pendingLoad.current = { files, vehicle, name };
       needsUpload.current = true;
       if (room) upload();
     },
@@ -210,7 +216,7 @@ export function useHost(): HostParty {
     play: (positionMs) => conn.current?.send({ t: "play", positionMs }),
     pause: () => conn.current?.send({ t: "pause" }),
     seek: (positionMs) => conn.current?.send({ t: "seek", positionMs }),
-    assign: (member, channel) => conn.current?.send({ t: "assign", member, channel }),
+    assign: (member, car, channel) => conn.current?.send({ t: "assign", member, car, channel }),
     calibrate: () => {
       // Browsers only start audio from a click, so the context is made here.
       audioContext.current ??= new AudioContext();

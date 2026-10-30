@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 // Party test: a host bot and headless-Chrome phones on one light; checks each light change against
-// the track's frame times. Needs lsa-server and `npm run dev`. DROP=1 cuts phone 1 mid-show.
-//   node scripts/party-e2e.mjs <show.fseq> [channel] [seconds]
+// the track's frame times. Needs lsa-server and `npm run dev`. DROP=1 cuts phone 1 mid-show;
+// START_S plays from that second. A folder of "Car #n/lightshow.fseq" is a fleet: phone n, car n.
+//   node scripts/party-e2e.mjs <show.fseq | fleet folder> [channel] [seconds]
 
-import { readFileSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { chromeSession, sleep, until } from "./chrome.mjs";
 
 const [showPath, channelArg = "21", secondsArg = "10"] = process.argv.slice(2);
@@ -20,14 +21,15 @@ if (APP.startsWith("https:")) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
 const MAX_ERROR_MS = 40; // one 20 ms frame plus one 60 Hz screen refresh, with margin
 const MAX_PHONE_GAP_MS = 20;
 const DROP = !!process.env.DROP;
+const START_MS = Number(process.env.START_S ?? 0) * 1000;
+const FLEET = statSync(showPath).isDirectory();
 
-// ------------------------------------------------------------------ expected timing from the file
-
-const bytes = new Uint8Array(readFileSync(showPath));
-const view = new DataView(bytes.buffer);
+const files = (FLEET ? Array.from({ length: PHONES }, (_, i) => `${showPath}/Car #${i + 1}/lightshow.fseq`) : [showPath]).map(
+  (path) => new Uint8Array(readFileSync(path)),
+);
+const view = new DataView(files[0].buffer);
 const channelCount = view.getUint32(10, true);
 const frameCount = view.getUint32(14, true);
-const stepMs = bytes[18];
 
 // ------------------------------------------------------------------ host bot
 
@@ -56,10 +58,11 @@ try {
   await host.opened;
   host.send({ t: "create" });
   const { room } = await host.take("created");
-  host.send({ t: "load", vehicle: "model-3y", name: "e2e" });
-  host.ws.send(bytes);
-  await host.take("show");
-  console.log(`room ${room}: show loaded (${frameCount} frames × ${channelCount} channels)`);
+  const sizes = FLEET ? files.map((f) => f.length) : [];
+  host.send({ t: "load", vehicle: "model-3y", name: "e2e", sizes });
+  host.ws.send(new Uint8Array(files.flatMap((f) => Array.from(f))));
+  const { cars } = await host.take("show");
+  console.log(`room ${room}: show loaded (${cars} car(s), car 1: ${frameCount} frames × ${channelCount} channels)`);
 
   const phones = [];
   for (let i = 0; i < PHONES; i++) {
@@ -75,13 +78,24 @@ try {
     console.error(`host saw: ${JSON.stringify(host.inbox.map((m) => m.t))}`);
     throw error;
   });
-  for (const member of roster.members) host.send({ t: "assign", member: member.id, channel: CHANNEL });
+  for (const [i, member] of roster.members.entries()) {
+    host.send({ t: "assign", member: member.id, car: FLEET ? i + 1 : 1, channel: CHANNEL });
+  }
 
   for (const [i, phone] of phones.entries()) {
     await until(() => phone.evaluate(`document.body.innerText.includes("· synced")`), `phone ${i + 1} clock sync`);
   }
   const label = await phones[0].evaluate(`document.querySelector(".phone-label strong")?.textContent`);
-  console.log(`${PHONES} phones joined and synced, all playing channel ${CHANNEL} (${label})`);
+  console.log(`${PHONES} phones joined and synced, all playing channel ${CHANNEL} (${label})${FLEET ? ", one per car" : ""}`);
+  if (FLEET) {
+    // Guests find their car's group by the number on screen.
+    for (const [i, phone] of phones.entries()) {
+      await until(
+        () => phone.evaluate(`document.querySelector(".phone-car")?.textContent === "Car ${i + 1}"`),
+        `phone ${i + 1} to show "Car ${i + 1}"`,
+      );
+    }
+  }
 
   // Each phone reports its health to the host's roster.
   // Browsers count localhost as secure even over http.
@@ -93,7 +107,7 @@ try {
   }, "phone status in the host's roster");
   for (const [i, m] of reported.members.entries()) console.log(`phone ${i + 1} reports ${JSON.stringify(m.health)}`);
 
-  host.send({ t: "play", positionMs: 0 });
+  host.send({ t: "play", positionMs: START_MS });
   const playback = await host.take("playback", (m) => m.playing);
   const t0 = playback.t0;
   let reconnected = true;
@@ -115,45 +129,49 @@ try {
     await sleep(LISTEN_MS + 1500);
   }
 
-  // Expected changes within the listened window.
-  // On/off per frame of the governed track phone 1 received (all phones play the same light).
-  const levels = await phones[0].evaluate("Array.from(window.__lsaTrack?.levels ?? [])");
-  const levelAt = (frame) => (levels[frame] >= 128 ? 255 : 0);
-  const lastFrame = Math.min(levels.length, Math.floor(LISTEN_MS / stepMs));
-  const expected = [];
-  for (let f = 1; f < lastFrame; f++) {
-    if (levelAt(f) !== levelAt(f - 1)) expected.push({ server: t0 + f * stepMs, level: levelAt(f) });
-  }
-
+  // Expected on/off changes in the listened window, from the governed track each phone received
+  // (its own car's in a fleet).
+  const from = t0 + START_MS;
   const results = [];
   for (const [i, phone] of phones.entries()) {
+    const track = JSON.parse(
+      await phone.evaluate("JSON.stringify({ stepMs: window.__lsaTrack?.stepMs, levels: Array.from(window.__lsaTrack?.levels ?? []) })"),
+    );
+    const levelAt = (frame) => (track.levels[frame] >= 128 ? 255 : 0);
+    const firstFrame = Math.ceil(START_MS / track.stepMs) + 1;
+    const lastFrame = Math.min(track.levels.length, Math.floor((START_MS + LISTEN_MS) / track.stepMs));
+    const expected = [];
+    for (let f = firstFrame; f < lastFrame; f++) {
+      if (levelAt(f) !== levelAt(f - 1)) expected.push({ server: t0 + f * track.stepMs, level: levelAt(f) });
+    }
     const all = await phone.evaluate("JSON.stringify(window.__lsaTransitions ?? [])");
-    const transitions = JSON.parse(all).filter((t) => t.server >= t0 && t.server < t0 + LISTEN_MS);
+    const transitions = JSON.parse(all).filter((t) => t.server >= from && t.server < from + LISTEN_MS);
     const errors = expected.map((e) => {
       const match = transitions
         .filter((t) => t.level === e.level)
         .reduce((best, t) => (!best || Math.abs(t.server - e.server) < Math.abs(best.server - e.server) ? t : best), null);
       return match ? match.server - e.server : Infinity;
     });
-    results.push({ phone: i + 1, transitions, errors });
+    results.push({ phone: i + 1, transitions, errors, expected: expected.length });
   }
 
-  console.log(`\nexpected ${expected.length} light changes in ${LISTEN_MS / 1000} s`);
-  let ok = expected.length > 0 && reconnected;
+  console.log(`\nlistened ${LISTEN_MS / 1000} s from ${START_MS / 1000} s`);
+  let ok = reconnected;
   for (const r of results) {
     const finite = r.errors.filter(Number.isFinite);
     const mean = finite.reduce((a, b) => a + b, 0) / Math.max(1, finite.length);
     const worst = Math.max(...r.errors.map(Math.abs));
-    const pass = finite.length === expected.length && worst <= MAX_ERROR_MS;
+    const pass = r.expected > 0 && finite.length === r.expected && worst <= MAX_ERROR_MS;
     ok &&= pass;
     console.log(
-      `phone ${r.phone}: ${r.transitions.length} changes seen, matched ${finite.length}/${expected.length}, ` +
+      `phone ${r.phone}: ${r.transitions.length} changes seen, matched ${finite.length}/${r.expected}, ` +
         `timing error mean ${mean.toFixed(1)} ms, worst ${worst.toFixed(1)} ms ${pass ? "✓" : "✗"}`,
     );
   }
+  // Phones on the same light should change together (in a fleet they play different tracks).
   const gaps = results[0].errors.map((e, i) => Math.abs(e - results[1].errors[i])).filter(Number.isFinite);
   const worstGap = gaps.length ? Math.max(...gaps) : Infinity;
-  const gapPass = worstGap <= MAX_PHONE_GAP_MS;
+  const gapPass = FLEET || worstGap <= MAX_PHONE_GAP_MS;
   if (!ok) {
     for (const [i, phone] of phones.entries()) {
       const frames = await phone.evaluate(
@@ -166,7 +184,7 @@ try {
     }
   }
   ok &&= gapPass;
-  console.log(`phone 1 vs phone 2: worst difference ${worstGap.toFixed(1)} ms ${gapPass ? "✓" : "✗"}`);
+  if (!FLEET) console.log(`phone 1 vs phone 2: worst difference ${worstGap.toFixed(1)} ms ${gapPass ? "✓" : "✗"}`);
   console.log(ok ? "\nPASS" : "\nFAIL");
   process.exitCode = ok ? 0 : 1;
 } catch (error) {

@@ -25,12 +25,16 @@ pub enum ClientMsg {
         #[serde(default)]
         name: Option<String>,
     },
-    /// Host: the next binary frame is a show for this vehicle.
+    /// Host: the next binary frame is a show for this vehicle: one `.fseq`, or one per car of a
+    /// fleet show back to back.
     Load {
         /// `model-s`, `model-x`, `model-3y` or `cybertruck`.
         vehicle: String,
         /// Show name for display.
         name: String,
+        /// Byte length of each car's file, car 1 first; empty for a single show.
+        #[serde(default)]
+        sizes: Vec<u32>,
     },
     /// Host: start playing from `position_ms`.
     Play {
@@ -61,12 +65,15 @@ pub enum ClientMsg {
         /// Milliseconds after the scheduled time.
         delay_ms: Option<f64>,
     },
-    /// Host: give a phone a specific light (1-based channel), or `None` to clear it.
+    /// Host: give a phone a specific light, or `None` to clear it.
     Assign {
         /// Member id.
         member: u64,
         /// 1-based Tesla channel number.
         channel: Option<u16>,
+        /// Car of a fleet show, from 1 (default 1).
+        #[serde(default)]
+        car: Option<u8>,
     },
     /// Phone: how it is doing, shown to the host in the roster. Sent when it changes.
     Status(PhoneHealth),
@@ -140,15 +147,15 @@ pub enum ServerMsg {
         name: String,
         /// Vehicle the show is emulated for.
         vehicle: String,
-        /// Milliseconds per frame.
-        step_ms: u8,
-        /// Number of frames.
-        frame_count: usize,
+        /// Cars in the show (1 unless it is a fleet show).
+        cars: u8,
         /// Show length in milliseconds.
         duration_ms: f64,
     },
     /// The light this phone plays.
     Role {
+        /// Car of a fleet show, from 1, or `None` while waiting for a light.
+        car: Option<u8>,
         /// 1-based Tesla channel, or `None` while waiting for a light.
         channel: Option<u16>,
         /// Readable light name.
@@ -203,6 +210,8 @@ pub struct RosterEntry {
     pub id: u64,
     /// Display name, if given.
     pub name: Option<String>,
+    /// Assigned car, from 1.
+    pub car: Option<u8>,
     /// Assigned 1-based channel.
     pub channel: Option<u16>,
     /// Whether the phone is connected (offline phones keep their light for a while).
@@ -219,15 +228,15 @@ pub const TRACK_HEADER_LEN: usize = 12;
 /// Encodes a phone's light track.
 ///
 /// Layout: `LSAT` · show version (u32 LE) · channel (u16 LE, 1-based) · step ms (u8) ·
-/// reserved (u8) · one level byte per frame (0 = off, 255 = full).
+/// car (u8, from 1) · one level byte per frame (0 = off, 255 = full).
 #[must_use]
-pub fn encode_track(version: u32, channel: u16, step_ms: u8, levels: &[u8]) -> Vec<u8> {
+pub fn encode_track(version: u32, car: u8, channel: u16, step_ms: u8, levels: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(TRACK_HEADER_LEN + levels.len());
     out.extend_from_slice(&TRACK_MAGIC);
     out.extend_from_slice(&version.to_le_bytes());
     out.extend_from_slice(&channel.to_le_bytes());
     out.push(step_ms);
-    out.push(0);
+    out.push(car);
     out.extend_from_slice(levels);
     out
 }

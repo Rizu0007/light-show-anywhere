@@ -54,7 +54,7 @@ jobs:
         run: node scripts/chirp-test.mjs
       - name: Tesla example show (not stored in the repo)
         run: ../scripts/fetch-tesla-example.sh
-      - name: Browser tests (party, reconnect, calibration, wake lock, HTTPS)
+      - name: Browser tests (party, reconnect, fleet, calibration, wake lock, HTTPS)
         run: scripts/e2e.sh
         env:
           # Preinstalled on GitHub's Ubuntu runners; Ubuntu's AppArmor blocks Chrome's sandbox.

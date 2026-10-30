@@ -170,6 +170,7 @@ async fn ws_handler(ws: WebSocketUpgrade, State(state): State<Arc<AppState>>) ->
 struct PendingLoad {
     vehicle: String,
     name: String,
+    sizes: Vec<u32>,
 }
 
 async fn connection(socket: WebSocket, state: Arc<AppState>) {
@@ -208,8 +209,16 @@ async fn connection(socket: WebSocket, state: Arc<AppState>) {
                     }));
                     continue;
                 }
-                Ok(ClientMsg::Load { vehicle, name }) => {
-                    pending = Some(PendingLoad { vehicle, name });
+                Ok(ClientMsg::Load {
+                    vehicle,
+                    name,
+                    sizes,
+                }) => {
+                    pending = Some(PendingLoad {
+                        vehicle,
+                        name,
+                        sizes,
+                    });
                 }
                 Ok(ClientMsg::Resume { token }) => {
                     let mut rooms = state.rooms();
@@ -233,9 +242,10 @@ async fn connection(socket: WebSocket, state: Arc<AppState>) {
                     reply_error(&tx, "send a load message before the show file".into());
                     continue;
                 };
-                let result = state
-                    .rooms()
-                    .load_show(id, &load.vehicle, &load.name, &bytes);
+                let result =
+                    state
+                        .rooms()
+                        .load_show(id, &load.vehicle, &load.name, &bytes, &load.sizes);
                 if let Err(message) = result {
                     reply_error(&tx, message);
                 }
@@ -277,7 +287,17 @@ fn handle(
         ClientMsg::Play { position_ms } => state.rooms().play(id, position_ms, now),
         ClientMsg::Pause => state.rooms().pause(id, now),
         ClientMsg::Seek { position_ms } => state.rooms().seek(id, position_ms, now),
-        ClientMsg::Assign { member, channel } => state.rooms().assign(id, member, channel),
+        ClientMsg::Assign {
+            member,
+            channel,
+            car,
+        } => {
+            let slot = channel.map(|channel| room::Slot {
+                car: car.unwrap_or(1),
+                channel,
+            });
+            state.rooms().assign(id, member, slot)
+        }
         ClientMsg::Calibrate => state.rooms().calibrate(id, now),
         ClientMsg::Heard { delay_ms } => state.rooms().heard(id, delay_ms),
         ClientMsg::Status(health) => state.rooms().status(id, health),

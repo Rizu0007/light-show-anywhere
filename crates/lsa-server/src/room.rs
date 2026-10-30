@@ -28,6 +28,8 @@ pub const MAX_SHOW_BYTES: usize = 64 * 1024 * 1024;
 /// Largest decoded show accepted (bytes). Tesla's limit, 200 channels for 4 hours at 15 ms per
 /// frame, is 192 MB; a compressed file can claim far more.
 pub const MAX_DECODED_BYTES: usize = 256 * 1024 * 1024;
+/// Most cars in one fleet show (Tesla's largest example has 8).
+pub const MAX_CARS: usize = 16;
 
 const ROOM_CODE_LEN: usize = 4;
 // No I, O, 0 or 1: codes are read aloud and typed on phones.
@@ -44,6 +46,16 @@ pub enum Outgoing {
 
 /// Unique id of a connection.
 pub type MemberId = u64;
+
+/// One light of a (fleet) show: the car, numbered from 1 left to right as seen from the front
+/// (as Tesla numbers them), and its 1-based Tesla channel.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Slot {
+    /// Car number, from 1.
+    pub car: u8,
+    /// Tesla channel, from 1.
+    pub channel: u16,
+}
 
 /// A connection's hold on its place in a room.
 #[derive(Debug)]
@@ -86,7 +98,7 @@ impl Session {
 struct Member {
     session: Session,
     name: Option<String>,
-    channel: Option<u16>,
+    slot: Option<Slot>,
     /// Chosen by the host; kept when a new show loads if still playable.
     pinned: bool,
     /// Last report from the phone.
@@ -98,57 +110,89 @@ struct LoadedShow {
     version: u32,
     name: String,
     vehicle: String,
-    rendered: Rendered,
-    playable: Vec<u16>,
     duration_ms: f64,
+    cars: Vec<CarShow>,
+    /// Lights handed out to phones: each car's playable lights in priority order, interleaved
+    /// so every car gets its most recognisable lights first.
+    slots: Vec<Slot>,
+}
+
+#[derive(Debug)]
+struct CarShow {
+    rendered: Rendered,
     /// Governed, encoded track of each playable light, made once instead of per phone.
     tracks: HashMap<u16, Vec<u8>>,
 }
 
 impl LoadedShow {
-    fn new(version: u32, name: &str, vehicle: &str, rendered: Rendered, duration_ms: f64) -> Self {
-        let playable = playable_channels(&rendered);
-        let mut show = Self {
+    fn new(version: u32, name: &str, vehicle: &str, cars: Vec<Rendered>, duration_ms: f64) -> Self {
+        let playable: Vec<Vec<u16>> = cars.iter().map(playable_channels).collect();
+        let longest = playable.iter().map(Vec::len).max().unwrap_or(0);
+        let slots = (0..longest)
+            .flat_map(|rank| {
+                playable
+                    .iter()
+                    .enumerate()
+                    .filter_map(move |(car, lights)| {
+                        Some(Slot {
+                            car: car as u8 + 1,
+                            channel: *lights.get(rank)?,
+                        })
+                    })
+            })
+            .collect();
+        let cars = cars
+            .into_iter()
+            .zip(&playable)
+            .enumerate()
+            .map(|(car, (rendered, lights))| {
+                let tracks = lights
+                    .iter()
+                    .filter_map(|&channel| {
+                        let slot = Slot {
+                            car: car as u8 + 1,
+                            channel,
+                        };
+                        Some((channel, encode_car_track(version, slot, &rendered)?))
+                    })
+                    .collect();
+                CarShow { rendered, tracks }
+            })
+            .collect();
+        Self {
             version,
             name: name.chars().take(80).collect(),
             vehicle: vehicle.to_owned(),
-            rendered,
-            playable,
             duration_ms,
-            tracks: HashMap::new(),
-        };
-        show.tracks = show
-            .playable
-            .iter()
-            .filter_map(|&number| Some((number, show.encode_track(number)?)))
-            .collect();
-        show
+            cars,
+            slots,
+        }
     }
 
-    fn step_ms(&self) -> u8 {
-        self.rendered.step_time().as_millis() as u8
+    fn car(&self, slot: Slot) -> Option<&CarShow> {
+        self.cars.get(usize::from(slot.car).checked_sub(1)?)
     }
 
-    /// The binary frame a phone playing light `number` receives.
-    fn track(&self, number: u16) -> Option<Vec<u8>> {
-        self.tracks
-            .get(&number)
+    /// The binary frame a phone playing `slot` receives.
+    fn track(&self, slot: Slot) -> Option<Vec<u8>> {
+        let car = self.car(slot)?;
+        car.tracks
+            .get(&slot.channel)
             .cloned()
-            .or_else(|| self.encode_track(number))
+            .or_else(|| encode_car_track(self.version, slot, &car.rendered))
     }
+}
 
-    fn encode_track(&self, number: u16) -> Option<Vec<u8>> {
-        let levels = self
-            .rendered
-            .channel_track(usize::from(number).checked_sub(1)?)?;
-        let step_ms = self.step_ms();
-        Some(encode_track(
-            self.version,
-            number,
-            step_ms,
-            &govern(&levels, step_ms),
-        ))
-    }
+fn encode_car_track(version: u32, slot: Slot, rendered: &Rendered) -> Option<Vec<u8>> {
+    let levels = rendered.channel_track(usize::from(slot.channel).checked_sub(1)?)?;
+    let step_ms = rendered.step_time().as_millis() as u8;
+    Some(encode_track(
+        version,
+        slot.car,
+        slot.channel,
+        step_ms,
+        &govern(&levels, step_ms),
+    ))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -246,7 +290,7 @@ impl Rooms {
             Member {
                 session: Session::new(tx, token),
                 name: name.map(|n| n.chars().take(32).collect()),
-                channel: None,
+                slot: None,
                 pinned: false,
                 health: None,
             },
@@ -357,13 +401,16 @@ impl Rooms {
         }
     }
 
-    /// Host: loads a show, renders it for `vehicle`, and sends every phone its track.
+    /// Host: loads a show, renders it for `vehicle`, and sends every phone its track. `bytes`
+    /// holds one `.fseq` per car of a fleet show, back to back, with their lengths in `sizes`
+    /// (empty for a single show).
     pub fn load_show(
         &mut self,
         host: MemberId,
         vehicle_name: &str,
         name: &str,
         bytes: &[u8],
+        sizes: &[u32],
     ) -> Result<(), String> {
         let room = self.hosted_room(host)?;
         let vehicle: Vehicle = Vehicle::from_id(vehicle_name)
@@ -371,19 +418,24 @@ impl Rooms {
         if bytes.len() > MAX_SHOW_BYTES {
             return Err("show file is too large".into());
         }
-        let header = lsa_fseq::Header::parse(bytes).map_err(|e| e.to_string())?;
-        if header.data_len().map_err(|e| e.to_string())? > MAX_DECODED_BYTES {
+        let files = split_files(bytes, sizes)?;
+        let mut decoded = 0usize;
+        for file in &files {
+            let header = lsa_fseq::Header::parse(file).map_err(|e| e.to_string())?;
+            decoded = decoded.saturating_add(header.data_len().map_err(|e| e.to_string())?);
+        }
+        if decoded > MAX_DECODED_BYTES {
             return Err("show is too long".into());
         }
-        let sequence = Sequence::parse(bytes).map_err(|e| e.to_string())?;
+        let mut cars = Vec::with_capacity(files.len());
+        let mut duration_ms = 0.0f64;
+        for file in files {
+            let sequence = Sequence::parse(file).map_err(|e| e.to_string())?;
+            duration_ms = duration_ms.max(sequence.duration().as_secs_f64() * 1000.0);
+            cars.push(render(&sequence, vehicle));
+        }
         let version = room.show.as_ref().map_or(1, |s| s.version + 1);
-        let show = LoadedShow::new(
-            version,
-            name,
-            vehicle_name,
-            render(&sequence, vehicle),
-            sequence.duration().as_secs_f64() * 1000.0,
-        );
+        let show = LoadedShow::new(version, name, vehicle_name, cars, duration_ms);
 
         room.playback = Playback::Paused { position_ms: 0.0 };
         let message = show_msg(&show);
@@ -393,9 +445,9 @@ impl Rooms {
         }
         // Pins survive when the light is in the new show; every other phone is dealt again.
         for member in room.members.values_mut() {
-            if !(member.pinned && member.channel.is_some_and(|c| show.playable.contains(&c))) {
+            if !(member.pinned && member.slot.is_some_and(|slot| show.slots.contains(&slot))) {
                 member.pinned = false;
-                member.channel = None;
+                member.slot = None;
             }
         }
         room.show = Some(show);
@@ -512,20 +564,24 @@ impl Rooms {
         &mut self,
         host: MemberId,
         member: MemberId,
-        channel: Option<u16>,
+        slot: Option<Slot>,
     ) -> Result<(), String> {
         let room = self.hosted_room(host)?;
+        if let Some(Slot { car, channel }) = slot {
+            if !(1..=lsa_tesla::EXTENDED_CHANNELS as u16).contains(&channel) {
+                return Err(format!("channel {channel} is out of range"));
+            }
+            let cars = room.show.as_ref().map_or(MAX_CARS, |show| show.cars.len());
+            if !(1..=cars).contains(&usize::from(car)) {
+                return Err(format!("car {car} is not in this show"));
+            }
+        }
         let phone = room
             .members
             .get_mut(&member)
             .ok_or("no such phone in this room")?;
-        if let Some(channel) = channel
-            && !(1..=lsa_tesla::EXTENDED_CHANNELS as u16).contains(&channel)
-        {
-            return Err(format!("channel {channel} is out of range"));
-        }
-        phone.channel = channel;
-        phone.pinned = channel.is_some();
+        phone.slot = slot;
+        phone.pinned = slot.is_some();
         // Only this phone changes; the others keep their lights.
         room.assign_unpinned();
         room.send_role(member);
@@ -628,25 +684,24 @@ impl Room {
         }
     }
 
-    /// Gives every phone without a light the playable light with the fewest phones (ties go to
-    /// the higher-priority light). Phones that have a light keep it, so a phone joining or
-    /// leaving never moves the others.
+    /// Gives every phone without a light the slot with the fewest phones (ties go to the earlier
+    /// slot). Phones that have a light keep it, so a phone joining or leaving never moves others.
     fn assign_unpinned(&mut self) {
         let Some(show) = &self.show else {
             return;
         };
-        let mut phones: HashMap<u16, usize> = show.playable.iter().map(|&c| (c, 0)).collect();
+        let mut phones: HashMap<Slot, usize> = show.slots.iter().map(|&s| (s, 0)).collect();
         for member in self.members.values() {
-            if let Some(count) = member.channel.and_then(|c| phones.get_mut(&c)) {
+            if let Some(count) = member.slot.and_then(|s| phones.get_mut(&s)) {
                 *count += 1;
             }
         }
-        for member in self.members.values_mut().filter(|m| m.channel.is_none()) {
-            let Some(&channel) = show.playable.iter().min_by_key(|c| phones[c]) else {
+        for member in self.members.values_mut().filter(|m| m.slot.is_none()) {
+            let Some(&slot) = show.slots.iter().min_by_key(|s| phones[s]) else {
                 return;
             };
-            member.channel = Some(channel);
-            *phones.entry(channel).or_default() += 1;
+            member.slot = Some(slot);
+            *phones.entry(slot).or_default() += 1;
         }
     }
 
@@ -666,30 +721,36 @@ impl Room {
         let Some(member) = self.members.get(&id) else {
             return;
         };
-        let (channel_count, label, color) = match (&self.show, member.channel) {
-            (Some(show), Some(number)) => {
-                let count = show.rendered.channel_count();
-                let channel = Channel::from_index(usize::from(number) - 1, count);
-                let vehicle = show.rendered.vehicle();
-                (
-                    count,
-                    Some(vehicle.channel_name(channel)),
-                    Some(color_of(vehicle, channel).to_owned()),
-                )
-            }
-            _ => (0, None, None),
+        let known = self
+            .show
+            .as_ref()
+            .zip(member.slot)
+            .and_then(|(show, slot)| Some((show, slot, show.car(slot)?)));
+        let Some((show, slot, car)) = known else {
+            send(
+                &member.session.tx,
+                ServerMsg::Role {
+                    car: None,
+                    channel: None,
+                    label: None,
+                    color: None,
+                },
+            );
+            return;
         };
+        let rendered = &car.rendered;
+        let channel = Channel::from_index(usize::from(slot.channel) - 1, rendered.channel_count());
+        let vehicle = rendered.vehicle();
         send(
             &member.session.tx,
             ServerMsg::Role {
-                channel: member.channel.filter(|_| channel_count > 0),
-                label,
-                color,
+                car: Some(slot.car),
+                channel: Some(slot.channel),
+                label: Some(vehicle.channel_name(channel)),
+                color: Some(color_of(vehicle, channel).to_owned()),
             },
         );
-        if let (Some(show), Some(number)) = (&self.show, member.channel)
-            && let Some(track) = show.track(number)
-        {
+        if let Some(track) = show.track(slot) {
             let _ = member.session.tx.send(Outgoing::Binary(track));
         }
     }
@@ -701,7 +762,8 @@ impl Room {
             .map(|(&id, m)| RosterEntry {
                 id,
                 name: m.name.clone(),
-                channel: m.channel,
+                car: m.slot.map(|s| s.car),
+                channel: m.slot.map(|s| s.channel),
                 online: m.session.online,
                 health: m.health.clone(),
             })
@@ -715,10 +777,32 @@ fn show_msg(show: &LoadedShow) -> ServerMsg {
         version: show.version,
         name: show.name.clone(),
         vehicle: show.vehicle.clone(),
-        step_ms: show.step_ms(),
-        frame_count: show.rendered.frame_count(),
+        cars: show.cars.len() as u8,
         duration_ms: show.duration_ms,
     }
+}
+
+/// Splits back-to-back files by `sizes`; no sizes means one file.
+fn split_files<'a>(bytes: &'a [u8], sizes: &[u32]) -> Result<Vec<&'a [u8]>, String> {
+    if sizes.is_empty() {
+        return Ok(vec![bytes]);
+    }
+    if sizes.len() > MAX_CARS {
+        return Err(format!("at most {MAX_CARS} cars per show"));
+    }
+    let mut files = Vec::with_capacity(sizes.len());
+    let mut rest = bytes;
+    for &size in sizes {
+        let (file, after) = rest
+            .split_at_checked(size as usize)
+            .ok_or("show files are shorter than their sizes")?;
+        files.push(file);
+        rest = after;
+    }
+    if !rest.is_empty() {
+        return Err("show files are longer than their sizes".into());
+    }
+    Ok(files)
 }
 
 fn send(tx: &UnboundedSender<Outgoing>, message: ServerMsg) {

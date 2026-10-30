@@ -10,17 +10,18 @@ export type ServerMsg =
       version: number;
       name: string;
       vehicle: string;
-      stepMs: number;
-      frameCount: number;
+      /** Cars in the show (1 unless it is a fleet show). */
+      cars: number;
       durationMs: number;
     }
-  | { t: "role"; channel: number | null; label: string | null; color: string | null }
+  | { t: "role"; car: number | null; channel: number | null; label: string | null; color: string | null }
   | { t: "playback"; playing: boolean; t0: number | null; positionMs: number }
   | {
       t: "roster";
       members: {
         id: number;
         name: string | null;
+        car: number | null;
         channel: number | null;
         online: boolean;
         health: PhoneHealth | null;
@@ -45,6 +46,7 @@ export interface PhoneHealth {
 /** A phone's light track (binary frame). */
 export interface Track {
   version: number;
+  car: number;
   channel: number;
   stepMs: number;
   levels: Uint8Array;
@@ -62,6 +64,7 @@ export function parseTrack(buffer: ArrayBuffer): Track | null {
     version: view.getUint32(4, true),
     channel: view.getUint16(8, true),
     stepMs: bytes[10],
+    car: bytes[11],
     levels: bytes.slice(TRACK_HEADER_LEN),
   };
 }

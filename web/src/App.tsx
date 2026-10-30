@@ -8,6 +8,13 @@ import { useSyncedAudio } from "./party/useSyncedAudio";
 
 const UI_UPDATE_MS = 100;
 const SPEAKER_DELAY_KEY = "lsa.speakerDelayMs";
+const SONG = /\.(wav|mp3|m4a|ogg|flac)$/i;
+/** Most cars in a fleet show (lsa-server's MAX_CARS). */
+const MAX_CARS = 16;
+
+/** Path inside a picked folder ("The Arrival/Car #2/LightShow/lightshow.fseq"), else the name. */
+const pathOf = (file: File) => file.webkitRelativePath || file.name;
+const byPath = (a: File, b: File) => pathOf(a).localeCompare(pathOf(b), undefined, { numeric: true });
 
 function storedSpeakerDelay(): number {
   try {
@@ -24,6 +31,8 @@ function formatTime(ms: number): string {
 
 export function App() {
   const [engineReady, setEngineReady] = useState(false);
+  // A fleet show has one Show per car (car 1 first); `show` is the car being previewed.
+  const [fleet, setFleet] = useState<Show[]>([]);
   const [show, setShow] = useState<Show | null>(null);
   const [showName, setShowName] = useState("");
   const [audioUrl, setAudioUrl] = useState<string | null>(null);
@@ -40,7 +49,7 @@ export function App() {
   const audio = useRef<HTMLAudioElement>(null);
   // Clock used when no song is loaded: time = offset + (now - startedAt).
   const clock = useRef({ offsetMs: 0, startedAt: 0 });
-  const showBytes = useRef<Uint8Array<ArrayBuffer> | null>(null);
+  const showBytes = useRef<Uint8Array<ArrayBuffer>[]>([]);
 
   const party = useHost();
   const [speakerDelayMs, setSpeakerDelayMs] = useState(storedSpeakerDelay);
@@ -56,12 +65,13 @@ export function App() {
     }
   }
 
-  // Send the current show to the party whenever it, the vehicle, or the party changes.
+  // Send the show to the party whenever it, the vehicle, or the party changes (not when the
+  // previewed car changes: a new upload restarts the show for every phone).
   const partyLoad = useRef(party.load);
   partyLoad.current = party.load;
   useEffect(() => {
-    if (party.active && show && showBytes.current) partyLoad.current(showBytes.current, vehicle, showName);
-  }, [party.active, show, vehicle, showName]);
+    if (party.active && fleet.length > 0) partyLoad.current(showBytes.current, vehicle, showName);
+  }, [party.active, fleet, vehicle, showName]);
 
   useEffect(() => {
     loadEngine()
@@ -124,34 +134,51 @@ export function App() {
 
   async function loadFiles(files: FileList | File[], forVehicle: Vehicle = vehicle) {
     setError(null);
-      for (const file of Array.from(files)) {
-        const name = file.name.toLowerCase();
-        if (name.endsWith(".fseq")) {
-          try {
-            const bytes = new Uint8Array(await file.arrayBuffer());
-            const next = new Show(bytes, forVehicle);
-            showBytes.current = bytes;
-            setShow((previous) => {
-              previous?.free();
-              return next;
-            });
-            setShowName(file.name);
-            setIssues(next.teslaIssues());
-            seek(startAt.current);
-            startAt.current = 0;
-          } catch (e) {
-            setError(`Could not read ${file.name}: ${String(e)}`);
-          }
-        } else if (/\.(wav|mp3|m4a|ogg|flac)$/.test(name)) {
-          setAudioUrl((previous) => {
-            if (previous) URL.revokeObjectURL(previous);
-            return URL.createObjectURL(file);
-          });
-          setAudioName(file.name);
-        } else {
-          setError(`Unsupported file: ${file.name} (use .fseq and .wav/.mp3)`);
-        }
+    const all = Array.from(files);
+    // A fleet show is one .fseq per car; Tesla names them all lightshow.fseq in "Car #1"… folders.
+    const shows = all.filter((f) => f.name.toLowerCase().endsWith(".fseq")).sort(byPath);
+    const song = all.filter((f) => SONG.test(f.name)).sort(byPath)[0];
+    if (shows.length === 0 && !song) {
+      setError(`Unsupported file: ${all[0]?.name ?? "none"} (use .fseq and .wav/.mp3)`);
+      return;
+    }
+    if (shows.length > MAX_CARS) {
+      setError(`At most ${MAX_CARS} cars per show (found ${shows.length} .fseq files)`);
+      return;
+    }
+    if (shows.length > 0) {
+      const next: Show[] = [];
+      try {
+        const bytes = await Promise.all(shows.map(async (f) => new Uint8Array(await f.arrayBuffer())));
+        for (const b of bytes) next.push(new Show(b, forVehicle));
+        showBytes.current = bytes;
+        setFleet((previous) => {
+          previous.forEach((s) => s.free());
+          return next;
+        });
+        setShow(next[0]);
+        setShowName(next.length > 1 ? pathOf(shows[0]).split("/")[0] || `${next.length}-car show` : shows[0].name);
+        setIssues(next[0].teslaIssues());
+        seek(startAt.current);
+        startAt.current = 0;
+      } catch (e) {
+        next.forEach((s) => s.free());
+        setError(`Could not read ${shows.map((f) => f.name).join(", ")}: ${String(e)}`);
       }
+    }
+    if (song) {
+      setAudioUrl((previous) => {
+        if (previous) URL.revokeObjectURL(previous);
+        return URL.createObjectURL(song);
+      });
+      setAudioName(song.name);
+    }
+  }
+
+  function previewCar(index: number) {
+    setShow(fleet[index]);
+    setIssues(fleet[index].teslaIssues());
+    setRevision((r) => r + 1);
   }
 
   function play() {
@@ -196,8 +223,8 @@ export function App() {
 
   function changeVehicle(next: Vehicle) {
     setVehicle(next);
-    if (show) {
-      show.setVehicle(next);
+    if (fleet.length > 0) {
+      fleet.forEach((s) => s.setVehicle(next));
       setRevision((r) => r + 1);
     }
   }
@@ -230,11 +257,34 @@ export function App() {
           <input
             type="file"
             accept=".fseq"
+            multiple
             disabled={!engineReady}
             onChange={(e) => e.target.files && void loadFiles(e.target.files)}
           />
           <em>{showName || "none"}</em>
         </label>
+        <label className="file">
+          <span>Fleet show (folder)</span>
+          <input
+            type="file"
+            {...{ webkitdirectory: "" }}
+            disabled={!engineReady}
+            onChange={(e) => e.target.files && void loadFiles(e.target.files)}
+          />
+          <em>{fleet.length > 1 ? `${fleet.length} cars` : "one .fseq per car"}</em>
+        </label>
+        {fleet.length > 1 && (
+          <label>
+            <span>Preview car</span>
+            <select value={fleet.indexOf(show as Show)} onChange={(e) => previewCar(Number(e.target.value))}>
+              {fleet.map((_, i) => (
+                <option key={i} value={i}>
+                  Car {i + 1}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
         <label className="file">
           <span>Song (.wav / .mp3)</span>
           <input
@@ -303,6 +353,7 @@ export function App() {
       <HostPanel
         party={party}
         hasShow={!!show}
+        cars={Math.max(1, fleet.length)}
         nameOf={nameOf}
         speakerDelayMs={speakerDelayMs}
         onSpeakerDelay={changeSpeakerDelay}
