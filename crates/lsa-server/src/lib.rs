@@ -7,6 +7,7 @@ pub mod protocol;
 pub mod room;
 pub mod safety;
 pub mod tls;
+pub mod wled;
 
 use std::net::SocketAddr;
 use std::path::PathBuf;
@@ -105,13 +106,24 @@ pub fn app(state: Arc<AppState>, static_dir: Option<PathBuf>) -> Router {
     }
 }
 
-/// Runs the server until Ctrl+C, over HTTPS when `tls` is given.
+/// Runs the server until Ctrl+C, over HTTPS when `tls` is given, driving WLED strips when
+/// `wled` lists them.
 pub async fn serve(
     addr: SocketAddr,
     static_dir: Option<PathBuf>,
     tls: Option<tls::Tls>,
+    wled: Option<wled::Config>,
 ) -> std::io::Result<()> {
-    let app = app(Arc::default(), static_dir);
+    let state = Arc::new(AppState::default());
+    if let Some(config) = wled {
+        let state = Arc::clone(&state);
+        tokio::spawn(async move {
+            if let Err(err) = wled::run(state, config).await {
+                tracing::error!("WLED output stopped: {err}");
+            }
+        });
+    }
+    let app = app(state, static_dir);
     let Some(tls) = tls else {
         let listener = tokio::net::TcpListener::bind(addr).await?;
         log_addresses("http", listener.local_addr()?);

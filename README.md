@@ -63,6 +63,14 @@ Phones then show their place number and a map with their spot, and the preview l
 crowd as it will look. A new song keeps everyone in their place; **Use the car shape** goes
 back.
 
+**LED strips** running [WLED](https://kno.wled.ge) can join in: list them in a file and start
+the server with `--wled wled.json` (see [`docs/wled.example.json`](docs/wled.example.json)).
+Each run of LEDs plays one light, or one channel per LED to make a strip a Cybertruck light
+bar (`"per_led": true`). Strips play the room that last pressed **Play**, in step with the
+phones, in the lights' colours and through the same flash limit, over DDP (UDP port 4048).
+When the party ends they go back to their own effects. Only the server's operator chooses the
+strips; hosts cannot point the server's packets elsewhere.
+
 The **Phones** list shows each phone's network round trip and flags phones that will not play
 well: clock not synced, slow Wi-Fi, not HTTPS, screen may sleep, no flashlight, or frequent
 reconnects. Before a real party, run the [real-phone party test](docs/party-test.md).

@@ -235,10 +235,34 @@ struct Room {
     roster_due: bool,
 }
 
+/// What LED outputs should play: the room that most recently pressed play, at this position.
+#[derive(Debug, Clone, PartialEq)]
+pub struct OnAir {
+    /// Room code.
+    pub room: String,
+    /// Its show version (tracks change when it does).
+    pub version: u32,
+    /// Show position in milliseconds.
+    pub position_ms: f64,
+}
+
+/// One light's governed levels and colour, for LED outputs.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct OutputTrack {
+    /// Milliseconds per level.
+    pub step_ms: u8,
+    /// One level per frame (0 = off, 255 = full), after the safety governor.
+    pub levels: Vec<u8>,
+    /// `white`, `amber` or `red`.
+    pub color: &'static str,
+}
+
 /// Every room on this server.
 #[derive(Debug, Default)]
 pub struct Rooms {
     by_code: HashMap<String, Room>,
+    /// The room that most recently pressed play (see [`Rooms::on_air`]).
+    on_air: Option<String>,
     /// Which room each connection belongs to.
     membership: HashMap<MemberId, String>,
     hasher: RandomState,
@@ -493,6 +517,7 @@ impl Rooms {
             from_ms,
         };
         room.broadcast_playback();
+        self.on_air = self.membership.get(&host).cloned();
         Ok(())
     }
 
@@ -658,6 +683,32 @@ impl Rooms {
         }
         room.roster_due = true;
         Ok(())
+    }
+
+    /// The room LED outputs play, if it is still open and has a show.
+    #[must_use]
+    pub fn on_air(&self, now: f64) -> Option<OnAir> {
+        let code = self.on_air.as_ref()?;
+        let room = self.by_code.get(code)?;
+        Some(OnAir {
+            room: code.clone(),
+            version: room.show.as_ref()?.version,
+            position_ms: room.position(now),
+        })
+    }
+
+    /// The governed levels of one light of a room's show, for LED outputs.
+    #[must_use]
+    pub fn output_track(&self, room: &str, slot: Slot) -> Option<OutputTrack> {
+        let rendered = &self.by_code.get(room)?.show.as_ref()?.car(slot)?.rendered;
+        let levels = rendered.channel_track(usize::from(slot.channel).checked_sub(1)?)?;
+        let step_ms = rendered.step_time().as_millis() as u8;
+        let channel = Channel::from_index(usize::from(slot.channel) - 1, rendered.channel_count());
+        Some(OutputTrack {
+            step_ms,
+            levels: govern(&levels, step_ms),
+            color: color_of(rendered.vehicle(), channel),
+        })
     }
 
     /// Whether any host is owed a roster.
