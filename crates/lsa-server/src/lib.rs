@@ -291,10 +291,7 @@ fn handle(
 ) {
     let now = state.now_ms();
     let result = match command {
-        ClientMsg::Create => {
-            state.rooms().create(id, tx.clone());
-            Ok(())
-        }
+        ClientMsg::Create => state.rooms().create(id, tx.clone()).map(|_| ()),
         ClientMsg::Join { room, name } => state.rooms().join(id, &room, name, tx.clone()),
         ClientMsg::Play { position_ms } => state.rooms().play(id, position_ms, now),
         ClientMsg::Pause => state.rooms().pause(id, now),

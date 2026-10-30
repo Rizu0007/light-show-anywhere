@@ -52,7 +52,7 @@ fn teslas_five_car_example_plays_as_one_fleet() {
     };
     let mut rooms = Rooms::default();
     let (host_tx, _host_rx) = unbounded_channel();
-    let code = rooms.create(1, host_tx);
+    let code = rooms.create(1, host_tx).unwrap();
     let sizes: Vec<u32> = files.iter().map(|f| f.len() as u32).collect();
     rooms
         .load_show(1, "model-s", "The Arrival", &files.concat(), &sizes)

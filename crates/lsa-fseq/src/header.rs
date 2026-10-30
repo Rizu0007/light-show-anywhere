@@ -245,6 +245,18 @@ impl Header {
         Duration::from_millis(u64::from(self.frame_count) * u64::from(self.step_time_ms))
     }
 
+    /// Whether the sparse ranges move the stored channels away from output channels
+    /// `0..channel_count`, so stored channel `i` is not channel `i` (one range from channel 0
+    /// changes nothing).
+    #[must_use]
+    pub fn remaps_channels(&self) -> bool {
+        match self.sparse_ranges.as_slice() {
+            [] => false,
+            [range] => range.start_channel != 0,
+            _ => true,
+        }
+    }
+
     /// Looks up a metadata entry by its two-letter code.
     #[must_use]
     pub fn variable_header(&self, code: [u8; 2]) -> Option<&VariableHeader> {

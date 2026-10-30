@@ -26,6 +26,11 @@ impl Show {
     pub fn new(bytes: &[u8], vehicle: &str) -> Result<Self, JsError> {
         let vehicle = parse_vehicle(vehicle)?;
         let sequence = Sequence::parse(bytes)?;
+        if sequence.header().remaps_channels() {
+            return Err(JsError::new(
+                "shows with sparse channel ranges are not supported; export it without them",
+            ));
+        }
         let rendered = render(&sequence, vehicle);
         Ok(Self { sequence, rendered })
     }

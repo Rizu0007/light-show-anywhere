@@ -32,6 +32,28 @@ pub const MAX_DECODED_BYTES: usize = 256 * 1024 * 1024;
 pub const MAX_CARS: usize = 16;
 /// Most places in a layout.
 pub const MAX_SPOTS: usize = 4096;
+/// Most open rooms on one server.
+pub const MAX_ROOMS: usize = 64;
+/// Most decoded show data held by all rooms together (bytes).
+pub const MAX_LOADED_BYTES: usize = 1024 * 1024 * 1024;
+
+/// How much one server holds, so one guest on the network cannot exhaust it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Limits {
+    /// Open rooms.
+    pub rooms: usize,
+    /// Decoded show data of all rooms together, in bytes.
+    pub show_bytes: usize,
+}
+
+impl Default for Limits {
+    fn default() -> Self {
+        Self {
+            rooms: MAX_ROOMS,
+            show_bytes: MAX_LOADED_BYTES,
+        }
+    }
+}
 
 const ROOM_CODE_LEN: usize = 4;
 // No I, O, 0 or 1: codes are read aloud and typed on phones.
@@ -124,6 +146,8 @@ struct LoadedShow {
     name: String,
     vehicle: String,
     duration_ms: f64,
+    /// Decoded size of all its cars, counted against [`Limits::show_bytes`].
+    bytes: usize,
     cars: Vec<CarShow>,
     /// Lights handed out to phones: each car's playable lights in priority order, interleaved
     /// so every car gets its most recognisable lights first.
@@ -138,7 +162,14 @@ struct CarShow {
 }
 
 impl LoadedShow {
-    fn new(version: u32, name: &str, vehicle: &str, cars: Vec<Rendered>, duration_ms: f64) -> Self {
+    fn new(
+        version: u32,
+        name: &str,
+        vehicle: &str,
+        cars: Vec<Rendered>,
+        duration_ms: f64,
+        bytes: usize,
+    ) -> Self {
         let playable: Vec<Vec<u16>> = cars.iter().map(playable_channels).collect();
         let longest = playable.iter().map(Vec::len).max().unwrap_or(0);
         let slots = (0..longest)
@@ -177,6 +208,7 @@ impl LoadedShow {
             name: name.chars().take(80).collect(),
             vehicle: vehicle.to_owned(),
             duration_ms,
+            bytes,
             cars,
             slots,
         }
@@ -267,12 +299,29 @@ pub struct Rooms {
     membership: HashMap<MemberId, String>,
     hasher: RandomState,
     counter: u64,
+    limits: Limits,
 }
 
 impl Rooms {
+    /// Rooms that hold at most `limits`.
+    #[must_use]
+    pub fn with_limits(limits: Limits) -> Self {
+        Self {
+            limits,
+            ..Self::default()
+        }
+    }
+
     /// Creates a room hosted by `host` and returns its code.
-    pub fn create(&mut self, host: MemberId, tx: UnboundedSender<Outgoing>) -> String {
+    pub fn create(
+        &mut self,
+        host: MemberId,
+        tx: UnboundedSender<Outgoing>,
+    ) -> Result<String, String> {
         self.leave(host);
+        if self.by_code.len() >= self.limits.rooms {
+            return Err("the server is full: too many parties at once".into());
+        }
         let code = self.new_code();
         let token = self.new_token();
         send(
@@ -295,7 +344,7 @@ impl Rooms {
             },
         );
         self.membership.insert(host, code.clone());
-        code
+        Ok(code)
     }
 
     /// Adds a phone to a room and sends it everything it needs to start playing, or tells it
@@ -450,6 +499,15 @@ impl Rooms {
         bytes: &[u8],
         sizes: &[u32],
     ) -> Result<(), String> {
+        // Shows held by every other room, counted against the server's budget.
+        let mine = self.membership.get(&host).cloned();
+        let others: usize = self
+            .by_code
+            .iter()
+            .filter(|(code, _)| Some(*code) != mine.as_ref())
+            .filter_map(|(_, room)| room.show.as_ref().map(|show| show.bytes))
+            .sum();
+        let budget = self.limits.show_bytes;
         let room = self.hosted_room(host)?;
         let vehicle: Vehicle = Vehicle::from_id(vehicle_name)
             .ok_or_else(|| format!("unknown vehicle {vehicle_name}"))?;
@@ -460,10 +518,19 @@ impl Rooms {
         let mut decoded = 0usize;
         for file in &files {
             let header = lsa_fseq::Header::parse(file).map_err(|e| e.to_string())?;
+            if header.remaps_channels() {
+                return Err(
+                    "shows with sparse channel ranges are not supported; export it without them"
+                        .into(),
+                );
+            }
             decoded = decoded.saturating_add(header.data_len().map_err(|e| e.to_string())?);
         }
         if decoded > MAX_DECODED_BYTES {
             return Err("show is too long".into());
+        }
+        if others.saturating_add(decoded) > budget {
+            return Err("the server is full: end another party first".into());
         }
         let mut cars = Vec::with_capacity(files.len());
         let mut duration_ms = 0.0f64;
@@ -473,7 +540,7 @@ impl Rooms {
             cars.push(render(&sequence, vehicle));
         }
         let version = room.show.as_ref().map_or(1, |s| s.version + 1);
-        let show = LoadedShow::new(version, name, vehicle_name, cars, duration_ms);
+        let show = LoadedShow::new(version, name, vehicle_name, cars, duration_ms, decoded);
 
         room.playback = Playback::Paused { position_ms: 0.0 };
         let message = show_msg(&show);
