@@ -21,8 +21,13 @@ jobs:
         run: cargo fmt --all --check
       - name: Lint
         run: cargo lint
+      - name: Tesla example show (not stored in the repo)
+        run: scripts/fetch-tesla-example.sh
       - name: Test
         run: cargo test --workspace --all-features
+        env:
+          # Fail instead of skipping tests that play Tesla's example show.
+          LSA_REQUIRE_SHOWS: 1
       - name: Browser (wasm) build
         run: cargo wasm-check
 
@@ -47,3 +52,13 @@ jobs:
         run: npm run build
       - name: Speaker calibration detector
         run: node scripts/chirp-test.mjs
+      - name: Tesla example show (not stored in the repo)
+        run: ../scripts/fetch-tesla-example.sh
+      - name: Browser tests (party, reconnect, calibration, HTTPS)
+        run: scripts/e2e.sh
+        env:
+          # Preinstalled on GitHub's Ubuntu runners; Ubuntu's AppArmor blocks Chrome's sandbox.
+          CHROME: /usr/bin/google-chrome
+          CHROME_FLAGS: --no-sandbox
+          # No sound card: Chrome's stand-in audio output is far less steady than real hardware.
+          CALIBRATE_MAX_ERROR_MS: 20

@@ -74,7 +74,21 @@ cd web && npm run dev:https                  # terminal 2: app on https://<addre
 `npm run dev` and a server without `--tls` work over plain `http`; the lights work, but phones
 may sleep and the flashlight is off.
 
-End-to-end check with real headless-Chrome phones (needs both servers running):
+Tests that play Tesla's official example show need it downloaded once (into the git-ignored
+`shows/`; CI does the same and fails rather than skipping them):
+
+```bash
+scripts/fetch-tesla-example.sh
+```
+
+Every browser test with real headless-Chrome phones, as CI runs them (starts and stops both
+servers itself; needs Chrome, `npm ci` and `npm run wasm` in `web/`):
+
+```bash
+cd web && scripts/e2e.sh
+```
+
+Or one at a time, with both servers running:
 
 ```bash
 cd web && node scripts/party-e2e.mjs ../shows/<show>.fseq [channel] [seconds]

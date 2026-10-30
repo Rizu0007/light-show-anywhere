@@ -115,12 +115,17 @@ fn other_frame_rates_are_governed() {
 
 #[test]
 fn every_light_of_tesla_example_1_is_safe() {
-    // Tesla's example show is not redistributed; the test runs when it is in shows/.
+    // Tesla's example show is not redistributed; scripts/fetch-tesla-example.sh downloads it.
+    // Without it the test skips, unless LSA_REQUIRE_SHOWS is set (CI).
     let path = concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../shows/tesla/lightshow_example_1_elevator_music/lightshow_example_1_elevator_music/lightshow.fseq"
     );
     let Ok(bytes) = std::fs::read(path) else {
+        assert!(
+            std::env::var_os("LSA_REQUIRE_SHOWS").is_none(),
+            "{path} not found; run scripts/fetch-tesla-example.sh"
+        );
         eprintln!("skipped: {path} not found");
         return;
     };

@@ -7,6 +7,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const CHROME = process.env.CHROME ?? "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+/** Extra command-line flags, space-separated (CI: `--no-sandbox`, where Linux blocks Chrome's). */
+const CHROME_FLAGS = (process.env.CHROME_FLAGS ?? "").split(" ").filter(Boolean);
 const DEBUG_PORT = 9333;
 
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -32,6 +34,7 @@ export async function chromeSession(extraArgs = []) {
     "--disable-background-timer-throttling",
     "--disable-renderer-backgrounding",
     "--disable-backgrounding-occluded-windows",
+    ...CHROME_FLAGS,
     ...extraArgs,
     "about:blank",
   ], { stdio: "ignore" });
