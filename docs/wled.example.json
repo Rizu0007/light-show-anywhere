@@ -1,0 +1,20 @@
+{
+  "fps": 40,
+  "devices": [
+    {
+      "address": "192.168.1.50",
+      "leds": 40,
+      "map": [
+        { "start": 0, "count": 10, "channel": 2 },
+        { "start": 10, "count": 10, "channel": 25 },
+        { "start": 20, "count": 10, "channel": 25 },
+        { "start": 30, "count": 10, "channel": 1 }
+      ]
+    },
+    {
+      "address": "wled-bar.local",
+      "leds": 60,
+      "map": [{ "start": 0, "count": 60, "channel": 47, "per_led": true }]
+    }
+  ]
+}

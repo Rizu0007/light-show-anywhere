@@ -1,6 +1,6 @@
 //! Which lights phones play, in what order, and in what colour.
 
-use lsa_tesla::{Behavior, Channel, Light, Rendered, Side, Vehicle};
+use lsa_tesla::{Behavior, Channel, Light, LightBar, Rendered, Side, Vehicle};
 
 /// Lights handed out to phones, most recognisable first. Light-bar pixels and interior zones
 /// are not handed out automatically.
@@ -77,7 +77,11 @@ pub fn color_of(vehicle: Vehicle, channel: Channel) -> &'static str {
             | Light::SideRepeater(_)
             | Light::SideMarker(_),
         ) => "amber",
-        Channel::Light(Light::Brake | Light::Tail(_) | Light::RearFog) => "red",
+        Channel::Light(Light::Brake | Light::Tail(_) | Light::RearFog)
+        | Channel::BarPixel {
+            bar: LightBar::Rear,
+            ..
+        } => "red",
         _ => "white",
     }
 }
