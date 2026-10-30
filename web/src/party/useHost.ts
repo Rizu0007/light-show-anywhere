@@ -2,10 +2,13 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { playTones } from "./calibrate";
 import { ClockSync, startClockSync } from "./clock";
 import { connect, type Connection, type PhoneHealth, type ServerMsg } from "./connection";
+import type { Spot } from "./layouts";
 
 export interface RosterMember {
   id: number;
   name: string | null;
+  /** Place in the layout, if there is one. */
+  spot: number | null;
   car: number | null;
   channel: number | null;
   /** False while the phone is away (it keeps its light for a couple of minutes). */
@@ -49,6 +52,10 @@ export interface HostParty {
   pause: () => void;
   seek: (positionMs: number) => void;
   assign: (member: number, car: number, channel: number | null) => void;
+  /** With a layout: moves a phone to a place (`null`: any place). */
+  assignSpot: (member: number, spot: number | null) => void;
+  /** Where phones stand; empty for the car shape. */
+  setLayout: (spots: Spot[]) => void;
   /** Plays calibration tones for phones with a microphone to measure (call from a click). */
   calibrate: () => void;
 }
@@ -73,6 +80,8 @@ export function useHost(): HostParty {
   // loaded while offline.
   const pendingLoad = useRef<{ files: Uint8Array<ArrayBuffer>[]; vehicle: string; name: string } | null>(null);
   const needsUpload = useRef(false);
+  const layout = useRef<Spot[]>([]);
+  const sendLayout = useCallback(() => conn.current?.send({ t: "layout", spots: layout.current }), []);
   // Lets a dropped connection take the room back (see lsa-server's resume).
   const token = useRef<string | null>(null);
 
@@ -126,6 +135,8 @@ export function useHost(): HostParty {
             setRoom(msg.room);
             setError(null);
             upload();
+            // After the show: the server checks the layout's cars against it.
+            if (layout.current.length > 0) sendLayout();
             break;
           case "resumed":
             setRoom(msg.room);
@@ -176,7 +187,7 @@ export function useHost(): HostParty {
     const sync = new ClockSync((m) => connection.send(m));
     clock.current = sync;
     stopSync.current = startClockSync(sync);
-  }, [upload, stop]);
+  }, [upload, stop, sendLayout]);
 
   useEffect(() => stop, [stop]);
 
@@ -217,6 +228,12 @@ export function useHost(): HostParty {
     pause: () => conn.current?.send({ t: "pause" }),
     seek: (positionMs) => conn.current?.send({ t: "seek", positionMs }),
     assign: (member, car, channel) => conn.current?.send({ t: "assign", member, car, channel }),
+    assignSpot: (member, spot) => conn.current?.send({ t: "assign", member, spot }),
+    setLayout: (spots) => {
+      layout.current = spots;
+      // Before the room exists it is sent on "created", after the show.
+      if (room) sendLayout();
+    },
     calibrate: () => {
       // Browsers only start audio from a click, so the context is made here.
       audioContext.current ??= new AudioContext();

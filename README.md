@@ -55,6 +55,14 @@ first, and each phone shows its car number in large type: group the guests by ca
 left to right as seen from the front. **Preview car** picks which car the preview shows; the
 host can move a phone to any car's light.
 
+**Crowd layouts** free the phones from the car shape. Under **Crowd layout**, make a grid,
+line or circle of places (up to 4096): each place plays the nearest light of the car picture
+(front or rear), so the crowd draws the car; a fleet show splits the layout left to right by
+car. Drag places to move them, double-click to add one, pick a place's light, or press Delete.
+Phones then show their place number and a map with their spot, and the preview lights the
+crowd as it will look. A new song keeps everyone in their place; **Use the car shape** goes
+back.
+
 The **Phones** list shows each phone's network round trip and flags phones that will not play
 well: clock not synced, slow Wi-Fi, not HTTPS, screen may sleep, no flashlight, or frequent
 reconnects. Before a real party, run the [real-phone party test](docs/party-test.md).

@@ -2,7 +2,7 @@
 // opens real headless-Chrome pages.
 
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -66,7 +66,13 @@ export async function chromeSession(extraArgs = []) {
       const { sessionId } = await call("Target.attachToTarget", { targetId, flatten: true });
       const evaluate = async (expression) =>
         (await call("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true }, sessionId)).result.value;
-      return { evaluate };
+      /** Saves a PNG of the page, `width` × `height` CSS pixels. */
+      const screenshot = async (path, width = 1200, height = 900) => {
+        await call("Emulation.setDeviceMetricsOverride", { width, height, deviceScaleFactor: 1, mobile: false }, sessionId);
+        const { data } = await call("Page.captureScreenshot", { format: "png" }, sessionId);
+        writeFileSync(path, Buffer.from(data, "base64"));
+      };
+      return { evaluate, screenshot };
     },
     async close() {
       ws.close();
