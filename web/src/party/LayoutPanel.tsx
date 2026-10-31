@@ -1,5 +1,5 @@
 import { forwardRef, useState } from "react";
-import { LIGHT_BARS, type View } from "../car/layout";
+import { lightGroups, type View } from "../car/layout";
 import { LayoutView, type LayoutViewHandle } from "./LayoutView";
 import { MAX_SPOTS, circle, grid, line, mapLights, type Place, type Spot } from "./layouts";
 
@@ -14,9 +14,6 @@ interface Props {
   bars: boolean;
   nameOf: (channel: number) => string;
 }
-
-const LIGHTS = Array.from({ length: 30 }, (_, i) => i + 1);
-const BAR_LEDS = LIGHT_BARS.flatMap((bar) => Array.from({ length: bar.count }, (_, i) => bar.first + i));
 
 /** Crowd layouts: where phones stand and what each place plays. Empty means the car shape. */
 export const LayoutPanel = forwardRef<LayoutViewHandle, Props>(function LayoutPanel(
@@ -98,7 +95,7 @@ export const LayoutPanel = forwardRef<LayoutViewHandle, Props>(function LayoutPa
               </select>
             )}
             <select value={spot.channel} onChange={(e) => update(selected, { channel: Number(e.target.value) })} aria-label="Light">
-              {(bars ? [...LIGHTS, ...BAR_LEDS] : LIGHTS).map((channel) => (
+              {lightGroups(bars).flatMap((group) => group.channels).map((channel) => (
                 <option key={channel} value={channel}>
                   {nameOf(channel)}
                 </option>

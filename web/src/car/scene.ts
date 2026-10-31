@@ -128,8 +128,6 @@ function mix(lit: { color: string; weight: number }[], full: number): Glow {
   return { rgb: rgb.map(Math.round) as [number, number, number], intensity: Math.min(1, total / full) };
 }
 
-// ---------------------------------------------------------------- closures
-
 /** Closure channels (1-based) drawn on the car. */
 export const CLOSURE = {
   falconDoor: { left: 31, right: 32 },
@@ -139,6 +137,40 @@ export const CLOSURE = {
   liftgate: 41,
   chargePort: 46,
 } as const;
+
+// Shapes of the moving parts, for the car's left side as seen from the front (picture right);
+// the right side and the rear view mirror them across the middle of the picture.
+
+/** Mirror: a stalk and a housing, folding about the pivot where it meets the body. */
+export const MIRROR = {
+  pivotX: 298,
+  pivotY: 97,
+  stalk: "M296 95 L334 92 L334 97 L296 100 Z",
+  housing: { x: 330, y: 84, w: 36, h: 15, r: 5 },
+};
+
+/** Falcon door: an outline and its window, rotating about a hinge on the roof. */
+export const FALCON = {
+  pivotX: 214,
+  pivotY: 50,
+  door: "M0 -5 L110 -9 Q118 -9 118 -2 L118 6 Q118 11 111 11 L0 6 Z",
+  glass: "M14 -3 L84 -6 L84 3 L14 3 Z",
+};
+
+/** Side window beside the windshield (front view) or rear window (rear view); its glass drops
+ *  from the top. */
+export const SIDE_WINDOW = { points: "252,62 259,61 301,97 288,97", top: 61, bottom: 97 };
+
+/** Charge port on the car's left flank, rear view (picture left); its door hinges at its left. */
+export const PORT = { x: 43, y: 126, w: 10, h: 14 };
+
+/** Cybertruck frunk lid, front view. The rear liftgate is the rear window (`BODY.glass`). */
+export const LID_FRUNK = "M118 97 L282 97 L298 108 L102 108 Z";
+/** Hinge lines of the lids. */
+export const LID_HINGE_Y = { liftgate: 62, frunk: 97 };
+
+/** Side repeaters sit on the mirrors (front view), so they fold with them. */
+export const ON_MIRROR = new Set([21, 22]);
 
 /** Mirrors fold towards the body: their width as seen from the front or rear (1 = unfolded). */
 export const mirrorWidth = (open: number) => 1 - 0.7 * clamp(open, 0, 1);
@@ -167,8 +199,6 @@ export function chargePortLight(open: number): string | null {
   return `hsl(${Math.round(open * 720) % 360} 100% 60%)`;
 }
 
-// ---------------------------------------------------------------- demo
-
 /** Breathing period of the demo shown before a show is loaded. */
 export const IDLE_PERIOD_MS = 4000;
 
@@ -190,8 +220,6 @@ export function idleLevels(timeMs: number, still = false): Uint8Array {
   }
   return levels;
 }
-
-// ---------------------------------------------------------------- timeline
 
 /** One slice of the show timeline: how much is lit, and in what colour. */
 export interface Activity {

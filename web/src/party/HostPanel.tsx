@@ -1,19 +1,10 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
-import { LIGHT_BARS } from "../car/layout";
+import { lightGroups } from "../car/layout";
 import type { PhoneHealth } from "./connection";
 import type { Spot } from "./layouts";
 import type { HostParty } from "./useHost";
 
-const range = (first: number, count: number) => Array.from({ length: count }, (_, i) => first + i);
-
-/** Lights the host can give a phone: the 30 exterior lights, then each Cybertruck light bar LED by
- *  LED when the show has them. */
-function assignableGroups(bars: boolean): { name: string | null; channels: number[] }[] {
-  const lights = { name: bars ? "Lights" : null, channels: range(1, 30) };
-  if (!bars) return [lights];
-  return [lights, ...LIGHT_BARS.map((bar) => ({ name: bar.name, channels: range(bar.first, bar.count) }))];
-}
 const MAX_SPEAKER_DELAY_MS = 600;
 
 /** Round trips above this make a phone's clock (and light) less reliable. */
@@ -207,7 +198,7 @@ export function HostPanel({ party, hasShow, cars, bars, layout, nameOf, speakerD
                 >
                   <option value="">Auto</option>
                   {Array.from({ length: cars }, (_, i) => i + 1).flatMap((car) =>
-                    assignableGroups(bars).map((group) => {
+                    lightGroups(bars).map((group) => {
                       const options = group.channels.map((channel) => (
                         <option key={channel} value={`${car}:${channel}`}>
                           {nameOf(channel)}

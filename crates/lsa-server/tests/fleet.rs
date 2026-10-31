@@ -1,6 +1,7 @@
 //! Tesla's 5-car example show ("The Arrival") as one fleet: scripts/fetch-tesla-example.sh
 //! downloads it; without it the test skips, unless `LSA_REQUIRE_SHOWS` is set (CI).
 
+use axum::body::Bytes;
 use lsa_server::protocol::ServerMsg;
 use lsa_server::room::{Outgoing, Rooms};
 use tokio::sync::mpsc::{UnboundedReceiver, unbounded_channel};
@@ -26,7 +27,7 @@ fn car_files() -> Option<Vec<Vec<u8>>> {
 }
 
 /// The role and track a phone was sent, skipping other messages.
-fn role_and_track(rx: &mut UnboundedReceiver<Outgoing>) -> (u8, u16, Vec<u8>) {
+fn role_and_track(rx: &mut UnboundedReceiver<Outgoing>) -> (u8, u16, Bytes) {
     let mut role = None;
     while let Ok(message) = rx.try_recv() {
         match message {

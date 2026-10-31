@@ -1,5 +1,5 @@
 import { forwardRef, useImperativeHandle, useRef, useState, type PointerEvent } from "react";
-import { COLORS, LIGHT_BARS, LIGHT_SPOTS } from "../car/layout";
+import { CHANNEL_COLORS, COLORS } from "../car/layout";
 import type { Spot } from "./layouts";
 
 const WIDTH = 1000;
@@ -19,12 +19,7 @@ interface Props {
   onDelete: (index: number) => void;
 }
 
-const colorOf = (() => {
-  const colors = new Map<number, string>();
-  for (const bar of LIGHT_BARS) for (let i = 0; i < bar.count; i++) colors.set(bar.first + i, bar.color);
-  for (const spot of LIGHT_SPOTS) if (!colors.has(spot.channel)) colors.set(spot.channel, spot.color);
-  return (channel: number) => colors.get(channel) ?? COLORS.white;
-})();
+const colorOf = (channel: number) => CHANNEL_COLORS.get(channel) ?? COLORS.white;
 
 const clamp = (v: number) => Math.min(1, Math.max(0, v));
 

@@ -1,7 +1,7 @@
 /** Exports the preview and the song as a video file, frame by frame (faster than playing it and
  *  frame-exact), with Mediabunny (MPL-2.0), loaded only when exporting. */
 
-import type { Show } from "../engine";
+import type { Show, Vehicle } from "../engine";
 import type { Spot } from "../party/layouts";
 import { HEIGHT, WIDTH, drawFrame } from "./render";
 
@@ -13,6 +13,8 @@ export interface ExportOptions {
   /** Car drawn when not filming the crowd (0-based). */
   car: number;
   bars: boolean;
+  /** Which closures the car has (Model X falcon doors, Cybertruck frunk). */
+  vehicle: Vehicle;
   /** Film this crowd layout instead of the car. */
   crowd: Spot[] | null;
   title: string;
@@ -83,6 +85,7 @@ export async function exportVideo(options: ExportOptions): Promise<ExportedVideo
         levelsByCar: options.fleet.map((s) => s.levelsAt(timeMs)),
         car: options.car,
         bars: options.bars,
+        vehicle: options.vehicle,
         crowd: options.crowd,
         title: options.title,
         timeMs,

@@ -203,7 +203,7 @@ async fn connection(socket: WebSocket, state: Arc<AppState>) {
                         continue;
                     }
                 },
-                Outgoing::Binary(bytes) => Message::Binary(bytes.into()),
+                Outgoing::Binary(bytes) => Message::Binary(bytes),
             };
             if sink.send(message).await.is_err() {
                 break;
