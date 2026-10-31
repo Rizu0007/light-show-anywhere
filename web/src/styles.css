@@ -30,10 +30,122 @@ body {
   gap: 16px;
 }
 
-header h1 {
+/* ---------------------------------------------------------------- header */
+
+.masthead {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.brand h1 {
   margin: 0;
-  font-size: 1.5rem;
+  font-size: 1.6rem;
   letter-spacing: 0.01em;
+  background: linear-gradient(90deg, #ffffff 0%, #cfe3ff 55%, #ff8a8a 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Two headlights with a signature line between them. */
+.brand-mark {
+  width: 42px;
+  height: 18px;
+  border-radius: 9px;
+  background:
+    radial-gradient(circle at 9px 9px, #fff4dc 0 4px, transparent 5px),
+    radial-gradient(circle at 33px 9px, #fff4dc 0 4px, transparent 5px),
+    linear-gradient(#fff4dc, #fff4dc) center / 18px 2px no-repeat,
+    #161d29;
+  box-shadow: 0 0 18px rgba(255, 244, 220, 0.35);
+}
+
+.now-showing {
+  color: var(--muted);
+  font-size: 0.85rem;
+  max-width: 40ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------- loading files */
+
+.drop-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10;
+  display: grid;
+  place-items: center;
+  background: rgba(7, 9, 13, 0.82);
+  backdrop-filter: blur(4px);
+  pointer-events: none;
+}
+
+.drop-overlay > div {
+  display: grid;
+  gap: 6px;
+  text-align: center;
+  padding: 48px 64px;
+  border: 2px dashed var(--accent);
+  border-radius: 20px;
+  color: var(--muted);
+}
+
+.drop-overlay strong {
+  color: var(--text);
+  font-size: 1.4rem;
+}
+
+.empty {
+  border: 1px dashed #2b3647;
+  border-radius: 12px;
+  padding: 16px 20px;
+  color: var(--muted);
+}
+
+.empty strong {
+  color: var(--text);
+}
+
+.empty ol {
+  margin: 8px 0 0;
+  padding-left: 20px;
+  display: grid;
+  gap: 4px;
+}
+
+.empty a {
+  color: var(--accent);
+}
+
+input[type="file"]::file-selector-button {
+  font: inherit;
+  color: var(--text);
+  background: #182030;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 12px;
+  margin-right: 10px;
+  cursor: pointer;
+}
+
+input[type="file"]::file-selector-button:hover {
+  border-color: var(--accent);
+}
+
+input[type="file"] {
+  color: var(--muted);
+  font-size: 0.8rem;
 }
 
 .tagline,
@@ -121,6 +233,23 @@ button:disabled {
   cursor: default;
 }
 
+button:not(:disabled):hover {
+  filter: brightness(1.12);
+}
+
+button,
+select,
+.closure-fill {
+  transition:
+    filter 0.15s,
+    border-color 0.15s;
+}
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .car-views {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
@@ -175,15 +304,127 @@ button:disabled {
   opacity: 0;
 }
 
+/* Light spilling from lit lamps: a bloom around each, pools on the ground, a tint on the body.
+   All start dark; the show sets their opacity. */
+.halo,
+.pool,
+.sheen,
+.lid-opening,
+.port-light {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.halo,
+.pool,
+.sheen {
+  mix-blend-mode: screen;
+}
+
+/* Mirrors, falcon doors, lids and the charge port door: body panels. */
+.body-part {
+  fill: #1a212d;
+  stroke: #2c3749;
+  stroke-width: 1;
+}
+
+.side-window-frame {
+  fill: #0b1018;
+}
+
+.side-window {
+  fill: #18222f;
+}
+
+.port-socket {
+  fill: #06080b;
+}
+
 .transport {
   display: flex;
   gap: 16px;
   align-items: center;
 }
 
-.transport input[type="range"] {
+.play {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 104px;
+  justify-content: center;
+}
+
+.icon {
+  width: 14px;
+  height: 14px;
+}
+
+/* The seek bar: the show's shape drawn on a canvas, a transparent range input on top. */
+.timeline {
+  position: relative;
   flex: 1;
-  accent-color: var(--accent);
+  height: 44px;
+  min-width: 160px;
+}
+
+.timeline canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+.timeline input[type="range"] {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent;
+  cursor: pointer;
+}
+
+.timeline input[type="range"]:disabled {
+  cursor: default;
+}
+
+.timeline input[type="range"]::-webkit-slider-runnable-track {
+  height: 100%;
+  background: transparent;
+}
+
+.timeline input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 14px;
+  height: 100%;
+  background: transparent;
+}
+
+.timeline input[type="range"]::-moz-range-track {
+  background: transparent;
+}
+
+.timeline input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 44px;
+  border: none;
+  background: transparent;
+}
+
+.keys {
+  display: flex;
+  gap: 4px;
+}
+
+kbd {
+  font: 0.72rem ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  padding: 2px 6px;
 }
 
 .time {
@@ -199,6 +440,17 @@ button:disabled {
   gap: 8px 20px;
   font-size: 0.85rem;
   color: var(--muted);
+}
+
+.chip {
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: #0c1017;
+}
+
+.info {
+  align-items: center;
 }
 
 .ok {
@@ -222,9 +474,23 @@ button:disabled {
   color: var(--muted);
 }
 
+.closures h3 {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
 .closure {
   display: grid;
   gap: 4px;
+  opacity: 0.55;
+  transition: opacity 0.2s;
+}
+
+.closure.open {
+  opacity: 1;
+  color: var(--text);
 }
 
 .closure-track {
@@ -509,4 +775,16 @@ button.secondary {
   gap: 10px;
   align-items: center;
   flex-wrap: wrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .keys {
+    display: none;
+  }
 }
