@@ -6,7 +6,7 @@ members = ["crates/*"]
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.99"
-repository = "https://github.com/your-name/light-show-anywhere"
+repository = "https://github.com/Rizu0007/light-show-anywhere"
 publish = false
 
 # One place for every dependency version. Crates opt in with `name.workspace = true`.

@@ -403,6 +403,7 @@ export function App() {
         party={party}
         hasShow={!!show}
         cars={Math.max(1, fleet.length)}
+        bars={showBars}
         layout={layout}
         nameOf={nameOf}
         speakerDelayMs={speakerDelayMs}
