@@ -204,3 +204,19 @@ fn zstd_file_claiming_a_huge_size_is_an_error() {
         Err(FseqError::DataLength { actual: 96, .. })
     ));
 }
+
+#[test]
+fn sparse_ranges_that_move_channels_are_flagged() {
+    let mut show = Sequence::from_frames(48, 20, vec![0; 48]).unwrap();
+    assert!(!show.header().remaps_channels(), "no ranges");
+    let range = |start_channel| SparseRange {
+        start_channel,
+        channel_count: 48,
+    };
+    show.header_mut().sparse_ranges = vec![range(0)];
+    assert!(!show.header().remaps_channels(), "one range from channel 0");
+    show.header_mut().sparse_ranges = vec![range(10)];
+    assert!(show.header().remaps_channels(), "one range from channel 10");
+    show.header_mut().sparse_ranges = vec![range(0), range(100)];
+    assert!(show.header().remaps_channels(), "two ranges");
+}

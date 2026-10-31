@@ -86,6 +86,11 @@ drops, or its tab is reloaded, phones keep playing and the host takes the room b
 reloaded tab does not re-send the same show, so nothing restarts). A place is kept
 for 2 minutes; **End party** closes the room at once.
 
+One server holds at most 64 parties and 1 GB of decoded shows between them (a long 200-channel
+show is about 100 MB), so nobody on the network can exhaust it; past that it answers "the server
+is full". Shows whose sparse channel ranges move the channels are refused rather than played on
+the wrong lights (Tesla's tools do not write them).
+
 How many phones? The server is not the limit: in its load test one laptop serves 2000 phones,
 which all get their light within 0.7 s of joining together, hear about **Play** within 25 ms
 (the show starts 1 s after the press) and are all back 0.8 s after a Wi-Fi blip. The Wi-Fi is the
