@@ -1,5 +1,6 @@
-// Shared helpers for the browser tests: waiting, and a minimal Chrome DevTools client that
-// opens real headless-Chrome pages.
+// Shared helpers for the browser tests: waiting, and real browser pages to drive. Headless Chrome
+// by default (DevTools protocol); BROWSER=safari drives Safari through safaridriver (WebDriver),
+// which needs Safari's Developer setting "Allow remote automation".
 
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -22,8 +23,12 @@ export async function until(check, what, timeoutMs = 15000) {
   throw new Error(`timed out waiting for ${what}`);
 }
 
-/** Starts headless Chrome; `extraArgs` are added to its command line. */
-export async function chromeSession(extraArgs = []) {
+/** Starts the browser; `chromeArgs` are added to Chrome's command line. */
+export function browserSession(chromeArgs = []) {
+  return process.env.BROWSER === "safari" ? safariSession() : chromeSession(chromeArgs);
+}
+
+async function chromeSession(extraArgs) {
   const profile = mkdtempSync(join(tmpdir(), "lsa-e2e-"));
   const chrome = spawn(CHROME, [
     "--headless=new",
@@ -84,6 +89,70 @@ export async function chromeSession(extraArgs = []) {
       } catch {
         // Leftover temp profile is harmless.
       }
+    },
+  };
+}
+
+const SAFARI_PORT = 4445;
+
+/** Safari through safaridriver. Pages are separate windows (background tabs are throttled). */
+async function safariSession() {
+  const driver = spawn("safaridriver", ["-p", String(SAFARI_PORT)], { stdio: "ignore" });
+  const base = `http://127.0.0.1:${SAFARI_PORT}`;
+  const request = async (method, path, body) => {
+    const response = await fetch(`${base}${path}`, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: body === undefined ? undefined : JSON.stringify(body),
+    });
+    const { value } = await response.json();
+    if (value?.error) throw new Error(`safaridriver: ${value.message}`);
+    return value;
+  };
+  await until(() => fetch(`${base}/status`).then((r) => r.ok).catch(() => false), "safaridriver to start");
+  const { sessionId } = await request("POST", "/session", { capabilities: { alwaysMatch: { browserName: "safari" } } });
+  const session = (path) => `/session/${sessionId}${path}`;
+  await request("POST", session("/timeouts"), { script: 300000, pageLoad: 60000 });
+
+  // One command at a time, each in its page's window.
+  let queue = Promise.resolve();
+  let current = await request("GET", session("/window"));
+  let firstUnused = true;
+  const inWindow = (handle, command) => {
+    const run = queue.then(async () => {
+      if (current !== handle) {
+        await request("POST", session("/window"), { handle });
+        current = handle;
+      }
+      return command();
+    });
+    queue = run.catch(() => {});
+    return run;
+  };
+
+  return {
+    async openPage(url) {
+      let handle = current;
+      if (!firstUnused) handle = (await inWindow(current, () => request("POST", session("/window/new"), { type: "window" }))).handle;
+      firstUnused = false;
+      await inWindow(handle, () => request("POST", session("/url"), { url }));
+      const evaluate = async (expression) => {
+        const script = `const done = arguments[arguments.length - 1];
+          Promise.resolve().then(() => (${expression})).then((value) => done({ value }), (e) => done({ error: String(e) }));`;
+        const result = await inWindow(handle, () => request("POST", session("/execute/async"), { script, args: [] }));
+        if (result?.error) throw new Error(result.error);
+        return result?.value;
+      };
+      const screenshot = async (path, width = 1200, height = 900) => {
+        await inWindow(handle, () => request("POST", session("/window/rect"), { width, height }));
+        const data = await inWindow(handle, () => request("GET", session("/screenshot")));
+        writeFileSync(path, Buffer.from(data, "base64"));
+      };
+      return { evaluate, screenshot };
+    },
+    async close() {
+      await request("DELETE", session("")).catch(() => {});
+      driver.kill();
     },
   };
 }

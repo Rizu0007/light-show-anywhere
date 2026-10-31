@@ -6,7 +6,7 @@
 //   node scripts/party-e2e.mjs <show.fseq | fleet folder> [channel] [seconds]
 
 import { readFileSync, statSync } from "node:fs";
-import { chromeSession, sleep, until } from "./chrome.mjs";
+import { browserSession, sleep, until } from "./browser.mjs";
 
 const [showPath, channelArg = "21", secondsArg = "10"] = process.argv.slice(2);
 if (!showPath) {
@@ -55,7 +55,7 @@ function hostBot() {
 // ------------------------------------------------------------------ test
 
 const host = hostBot();
-const chrome = await chromeSession();
+const chrome = await browserSession();
 try {
   await host.opened;
   host.send({ t: "create" });

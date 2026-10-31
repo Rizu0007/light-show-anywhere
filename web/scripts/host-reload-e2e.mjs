@@ -4,7 +4,7 @@
 //   node scripts/host-reload-e2e.mjs <show.fseq>
 
 import { resolve } from "node:path";
-import { chromeSession, sleep, until } from "./chrome.mjs";
+import { browserSession, sleep, until } from "./browser.mjs";
 
 const APP = process.env.APP ?? "http://localhost:5173";
 if (APP.startsWith("https:")) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -23,7 +23,7 @@ const click = (page, text) =>
   page.evaluate(`[...document.querySelectorAll("button")].find((b) => b.textContent === ${JSON.stringify(text)})?.click()`);
 const roomOf = (page) => page.evaluate(`document.querySelector(".room-code")?.textContent?.replace("…", "") || null`);
 
-const chrome = await chromeSession();
+const chrome = await browserSession();
 try {
   const host = await chrome.openPage(`${APP}/?show=/@fs${resolve(showPath)}`);
   await until(() => host.evaluate(`document.body.innerText.includes("frames")`), "the show to load");

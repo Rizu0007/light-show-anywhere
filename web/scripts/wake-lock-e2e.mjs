@@ -2,7 +2,7 @@
 // Wake lock in headless Chrome with a stand-in lock: taken on join, again after a screen lock
 // (once), released on leaving. Needs `npm run dev`.
 
-import { chromeSession } from "./chrome.mjs";
+import { browserSession } from "./browser.mjs";
 
 const APP = process.env.APP ?? "http://localhost:5173";
 if (APP.startsWith("https:")) process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0";
@@ -16,7 +16,7 @@ const EXPECTED = [
   { step: "browser refuses", awake: false, held: 0 },
 ];
 
-const chrome = await chromeSession();
+const chrome = await browserSession();
 try {
   const page = await chrome.openPage(`${APP}/`);
   await new Promise((r) => setTimeout(r, 1500));

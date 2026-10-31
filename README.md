@@ -118,7 +118,8 @@ Tests that play Tesla's official example show need it downloaded once (into the 
 scripts/fetch-tesla-example.sh
 ```
 
-Every browser test with real headless-Chrome phones, as CI runs them (starts and stops both
+Every browser test with real headless-Chrome phones (or Safari windows with `BROWSER=safari`,
+after ticking *Allow remote automation* in Safari's Developer settings), as CI runs them (starts and stops both
 servers itself; needs Chrome, `npm ci` and `npm run wasm` in `web/`):
 
 ```bash
