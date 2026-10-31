@@ -1,10 +1,19 @@
 import { useEffect, useState } from "react";
 import QRCode from "qrcode";
+import { LIGHT_BARS } from "../car/layout";
 import type { PhoneHealth } from "./connection";
 import type { Spot } from "./layouts";
 import type { HostParty } from "./useHost";
 
-const ASSIGNABLE_LIGHTS = Array.from({ length: 30 }, (_, i) => i + 1);
+const range = (first: number, count: number) => Array.from({ length: count }, (_, i) => first + i);
+
+/** Lights the host can give a phone: the 30 exterior lights, then each Cybertruck light bar LED by
+ *  LED when the show has them. */
+function assignableGroups(bars: boolean): { name: string | null; channels: number[] }[] {
+  const lights = { name: bars ? "Lights" : null, channels: range(1, 30) };
+  if (!bars) return [lights];
+  return [lights, ...LIGHT_BARS.map((bar) => ({ name: bar.name, channels: range(bar.first, bar.count) }))];
+}
 const MAX_SPEAKER_DELAY_MS = 600;
 
 /** Round trips above this make a phone's clock (and light) less reliable. */
@@ -40,6 +49,8 @@ interface Props {
   hasShow: boolean;
   /** Cars in the loaded show (1 unless it is a fleet show). */
   cars: number;
+  /** The show has Cybertruck light bars, so phones can play single LEDs of them. */
+  bars: boolean;
   /** Where phones stand; empty for the car shape. */
   layout: Spot[];
   nameOf: (channel: number) => string;
@@ -47,7 +58,7 @@ interface Props {
   onSpeakerDelay: (ms: number) => void;
 }
 
-export function HostPanel({ party, hasShow, cars, layout, nameOf, speakerDelayMs, onSpeakerDelay }: Props) {
+export function HostPanel({ party, hasShow, cars, bars, layout, nameOf, speakerDelayMs, onSpeakerDelay }: Props) {
   const [qr, setQr] = useState<string | null>(null);
   const joinUrl = party.room ? `${location.origin}/join?room=${party.room}` : null;
   const isLocalhost = ["localhost", "127.0.0.1", "::1"].includes(location.hostname);
@@ -195,20 +206,24 @@ export function HostPanel({ party, hasShow, cars, layout, nameOf, speakerDelayMs
                   }}
                 >
                   <option value="">Auto</option>
-                  {Array.from({ length: cars }, (_, i) => i + 1).map((car) => {
-                    const options = ASSIGNABLE_LIGHTS.map((channel) => (
-                      <option key={channel} value={`${car}:${channel}`}>
-                        {nameOf(channel)}
-                      </option>
-                    ));
-                    return cars > 1 ? (
-                      <optgroup key={car} label={`Car ${car}`}>
-                        {options}
-                      </optgroup>
-                    ) : (
-                      options
-                    );
-                  })}
+                  {Array.from({ length: cars }, (_, i) => i + 1).flatMap((car) =>
+                    assignableGroups(bars).map((group) => {
+                      const options = group.channels.map((channel) => (
+                        <option key={channel} value={`${car}:${channel}`}>
+                          {nameOf(channel)}
+                        </option>
+                      ));
+                      // Optgroups cannot nest, so a fleet's groups name the car too.
+                      const label = [cars > 1 ? `Car ${car}` : null, group.name].filter(Boolean).join(" · ");
+                      return label ? (
+                        <optgroup key={`${car}:${group.name}`} label={label}>
+                          {options}
+                        </optgroup>
+                      ) : (
+                        options
+                      );
+                    }),
+                  )}
                 </select>
               )}
             </li>

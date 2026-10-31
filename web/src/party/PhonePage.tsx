@@ -99,6 +99,8 @@ export function PhonePage() {
   const connection = useRef<Connection | null>(null);
   const clock = useRef<ClockSync | null>(null);
   const track = useRef<Track | null>(null);
+  /** Version of the room's current show; tracks of any other show are ignored. */
+  const showVersion = useRef<number | null>(null);
   const playback = useRef<Playback>({ playing: false, t0: null, positionMs: 0 });
   const roleRef = useRef<Role>(role);
   const torch = useRef<MediaStreamTrack | null>(null);
@@ -214,6 +216,11 @@ export function PhonePage() {
             break;
           case "show":
             setCars(msg.cars);
+            // A new show: go dark until its track arrives instead of playing the old one.
+            if (msg.version !== showVersion.current) {
+              showVersion.current = msg.version;
+              track.current = null;
+            }
             break;
           case "layout":
             setPlaces(msg.spots);
@@ -257,6 +264,8 @@ export function PhonePage() {
         }
       },
       onTrack: (t) => {
+        // The server sends a show before its tracks, so a mismatch is a stale track.
+        if (t.version !== showVersion.current) return;
         track.current = t;
         // Development: the governed track as received, read by scripts/party-e2e.mjs.
         if (import.meta.env.DEV) (window as unknown as { __lsaTrack: Track }).__lsaTrack = t;
