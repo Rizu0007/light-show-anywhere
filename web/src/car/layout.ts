@@ -130,6 +130,14 @@ export const LIGHT_BARS: {
   { name: "Offroad Light Bar", first: 167, count: 6, view: "front", x0: 250, x1: 150, y: 58, color: COLORS.barWhite },
 ];
 
+/** Colour of every drawn light channel (1-based), light bars LED by LED. */
+export const CHANNEL_COLORS: ReadonlyMap<number, string> = (() => {
+  const colors = new Map<number, string>();
+  for (const bar of LIGHT_BARS) for (let i = 0; i < bar.count; i++) colors.set(bar.first + i, bar.color);
+  for (const spot of LIGHT_SPOTS) if (!colors.has(spot.channel)) colors.set(spot.channel, spot.color);
+  return colors;
+})();
+
 /** Interior RGB zones: first channel of each R,G,B triple. */
 export const INTERIOR = {
   display: 176,

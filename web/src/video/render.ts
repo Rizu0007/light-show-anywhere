@@ -1,7 +1,18 @@
 /** Draws one video frame on a canvas: the car from the front and rear (as on the page), or the
  *  crowd layout, with the show's title and a time bar. */
 
-import { BODY, COLORS, INTERIOR, LIGHT_BARS, LIGHT_SPOTS, VIEW_HEIGHT, VIEW_WIDTH, type Shape, type View } from "../car/layout";
+import {
+  BODY,
+  CHANNEL_COLORS,
+  COLORS,
+  INTERIOR,
+  LIGHT_BARS,
+  LIGHT_SPOTS,
+  VIEW_HEIGHT,
+  VIEW_WIDTH,
+  type Shape,
+  type View,
+} from "../car/layout";
 import type { Spot } from "../party/layouts";
 
 export const WIDTH = 1280;
@@ -25,13 +36,6 @@ export interface Frame {
 
 const BACKGROUND = "#05070a";
 const MUTED = "#8691a3";
-
-const channelColors = (() => {
-  const colors = new Map<number, string>();
-  for (const bar of LIGHT_BARS) for (let i = 0; i < bar.count; i++) colors.set(bar.first + i, bar.color);
-  for (const spot of LIGHT_SPOTS) if (!colors.has(spot.channel)) colors.set(spot.channel, spot.color);
-  return colors;
-})();
 
 function shapePath(shape: Shape): Path2D {
   const path = new Path2D();
@@ -107,7 +111,7 @@ function drawCrowd(ctx: Context, spots: Spot[], levelsByCar: (Uint8Array | undef
   for (const spot of spots) {
     const path = new Path2D();
     path.arc(spot.x * w, spot.y * h, r, 0, 2 * Math.PI);
-    const color = channelColors.get(spot.channel) ?? COLORS.white;
+    const color = CHANNEL_COLORS.get(spot.channel) ?? COLORS.white;
     light(ctx, path, color, levelsByCar[spot.car - 1]?.[spot.channel - 1] ?? 0);
   }
 }

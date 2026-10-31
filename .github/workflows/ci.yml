@@ -54,9 +54,11 @@ jobs:
         run: node scripts/chirp-test.mjs
       - name: Crowd layouts
         run: node scripts/layout-test.mjs
+      - name: Car preview scene (glow, closures, demo, timeline)
+        run: node scripts/car-test.mjs
       - name: Tesla example show (not stored in the repo)
         run: ../scripts/fetch-tesla-example.sh
-      - name: Browser tests (party, reconnect, host reload, layout, fleet, calibration, video, wake lock, HTTPS)
+      - name: Browser tests (car preview, party, reconnect, host reload, layout, fleet, calibration, video, wake lock, HTTPS)
         run: scripts/e2e.sh
         env:
           # Preinstalled on GitHub's Ubuntu runners; Ubuntu's AppArmor blocks Chrome's sandbox.

@@ -43,6 +43,8 @@ start() {
 
 cd "$web"
 start
+echo "== car preview"
+node scripts/car-e2e.mjs "$show"
 echo "== party"
 node scripts/party-e2e.mjs "$show"
 echo "== party, phone 1 dropped mid-show"

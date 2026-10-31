@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CarView, type CarViewHandle } from "./car/CarView";
 import { ClosurePanel, type ClosurePanelHandle } from "./car/ClosurePanel";
+import { Timeline } from "./car/Timeline";
 import { Show, VEHICLES, channelName, loadEngine, type Vehicle } from "./engine";
 import { HostPanel } from "./party/HostPanel";
 import { LayoutPanel } from "./party/LayoutPanel";
@@ -11,11 +12,27 @@ import { useSyncedAudio } from "./party/useSyncedAudio";
 import { ExportButton } from "./video/ExportButton";
 
 const UI_UPDATE_MS = 100;
+/** How far the arrow keys jump. */
+const SEEK_STEP_MS = 5000;
 const SPEAKER_DELAY_KEY = "lsa.speakerDelayMs";
 const LAYOUT_KEY = "lsa.layout";
 const SONG = /\.(wav|mp3|m4a|ogg|flac)$/i;
 /** Most cars in a fleet show (lsa-server's MAX_CARS). */
 const MAX_CARS = 16;
+
+/** Keys typed into these are theirs, not shortcuts. */
+const FORM_CONTROL = "input, select, textarea, button, [contenteditable]";
+
+const PlayIcon = () => (
+  <svg viewBox="0 0 16 16" aria-hidden="true" className="icon">
+    <path d="M4 2.5v11l9.5-5.5z" fill="currentColor" />
+  </svg>
+);
+const PauseIcon = () => (
+  <svg viewBox="0 0 16 16" aria-hidden="true" className="icon">
+    <path d="M3.5 2.5h3v11h-3zM9.5 2.5h3v11h-3z" fill="currentColor" />
+  </svg>
+);
 
 /** Path inside a picked folder ("The Arrival/Car #2/LightShow/lightshow.fseq"), else the name. */
 const pathOf = (file: File) => file.webkitRelativePath || file.name;
@@ -57,6 +74,8 @@ export function App() {
   const [issues, setIssues] = useState<string[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
+  // Files dragged over the page: enter/leave fire for every child, so count them.
+  const [dragDepth, setDragDepth] = useState(0);
 
   const car = useRef<CarViewHandle>(null);
   const closures = useRef<ClosurePanelHandle>(null);
@@ -261,6 +280,28 @@ export function App() {
     }
   }
 
+  // Keyboard: Space plays or pauses, the arrows jump, Home goes back to the start. The handler
+  // is replaced every render so it always sees the current show and position.
+  const shortcut = useRef<(event: KeyboardEvent) => void>(() => undefined);
+  shortcut.current = (event) => {
+    if (!show || event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.target instanceof Element && event.target.closest(FORM_CONTROL)) return;
+    const now = currentMs();
+    if (event.key === " ") (isPlaying ? pause : play)();
+    else if (event.key === "ArrowLeft") seek(Math.max(0, now - SEEK_STEP_MS));
+    else if (event.key === "ArrowRight") seek(Math.min(show.durationMs, now + SEEK_STEP_MS));
+    else if (event.key === "Home") seek(0);
+    else return;
+    event.preventDefault();
+  };
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => shortcut.current(event);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  const levelsAt = useMemo(() => (show ? (ms: number) => show.levelsAt(ms) : null), [show]);
+
   const channelCount = show?.channelCount ?? 200;
   const nameOf = useCallback(
     (channel: number) => (engineReady ? channelName(channel - 1, channelCount, vehicle) : `Channel ${channel}`),
@@ -272,15 +313,34 @@ export function App() {
   return (
     <div
       className="app"
+      onDragEnter={(e) => {
+        if (e.dataTransfer.types.includes("Files")) setDragDepth((d) => d + 1);
+      }}
+      onDragLeave={() => setDragDepth((d) => Math.max(0, d - 1))}
       onDragOver={(e) => e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
+        setDragDepth(0);
         void loadFiles(e.dataTransfer.files);
       }}
     >
-      <header>
-        <h1>Light Show Anywhere</h1>
-        <p className="tagline">Play any Tesla light show — no Tesla needed.</p>
+      {dragDepth > 0 && (
+        <div className="drop-overlay" aria-hidden="true">
+          <div>
+            <strong>Drop to load</strong>
+            <span>a .fseq show, its song, or a fleet show's files</span>
+          </div>
+        </div>
+      )}
+      <header className="masthead">
+        <div className="brand">
+          <span className="brand-mark" aria-hidden="true" />
+          <div>
+            <h1>Light Show Anywhere</h1>
+            <p className="tagline">Play any Tesla light show — no Tesla needed.</p>
+          </div>
+        </div>
+        {show && <span className="now-showing">{showName}</span>}
       </header>
 
       <section className="controls">
@@ -340,41 +400,53 @@ export function App() {
 
       {error && <p className="error">{error}</p>}
       {!show && !error && (
-        <p className="hint">Drop a Tesla light show (.fseq) and its song here, or choose files above.</p>
+        <section className="empty">
+          <strong>Drop a Tesla light show here</strong>
+          <ol>
+            <li>
+              A <code>.fseq</code> show: Tesla's{" "}
+              <a href="https://github.com/teslamotors/light-show" target="_blank" rel="noreferrer">
+                examples
+              </a>
+              , or one made in xLights, LightCue or LightMyTesla.
+            </li>
+            <li>Its song (.wav or .mp3), so the lights play to the music.</li>
+            <li>Press Play, or start a party and let phones become the lights.</li>
+          </ol>
+        </section>
       )}
 
-      <CarView ref={car} showBars={showBars} nameOf={nameOf} />
+      <CarView ref={car} showBars={showBars} vehicle={vehicle} idle={!show} nameOf={nameOf} />
 
       <section className="transport">
-        <button onClick={isPlaying ? pause : play} disabled={!show}>
+        <button className="play" onClick={isPlaying ? pause : play} disabled={!show}>
+          {isPlaying ? <PauseIcon /> : <PlayIcon />}
           {isPlaying ? "Pause" : "Play"}
         </button>
-        <input
-          type="range"
-          min={0}
-          max={duration}
-          step={10}
-          value={Math.min(timeMs, duration)}
-          disabled={!show}
-          onChange={(e) => seek(Number(e.target.value))}
-          aria-label="Position"
-        />
+        <Timeline levelsAt={levelsAt} durationMs={duration} timeMs={timeMs} onSeek={seek} revision={revision} />
         <span className="time">
           {formatTime(timeMs)} / {formatTime(duration)}
         </span>
+        {show && (
+          <span className="keys" aria-label="Keyboard shortcuts: space plays or pauses, arrows jump 5 seconds">
+            <kbd>Space</kbd> <kbd>←</kbd>
+            <kbd>→</kbd>
+          </span>
+        )}
       </section>
 
       {show && (
         <section className="info">
-          <span>
+          <span className="chip">
             {show.channelCount} channels · {show.frameCount} frames · {show.stepMs} ms
           </span>
-          {show.mediaFilename && <span>Made for: {show.mediaFilename}</span>}
+          {fleet.length > 1 && <span className="chip">{fleet.length} cars</span>}
+          {show.mediaFilename && <span className="chip">Made for: {show.mediaFilename}</span>}
           {issues.length === 0 ? (
-            <span className="ok">✓ Plays on a real Tesla</span>
+            <span className="chip ok">✓ Plays on a real Tesla</span>
           ) : (
             issues.map((issue) => (
-              <span key={issue} className="warn">
+              <span key={issue} className="chip warn">
                 ⚠ {issue}
               </span>
             ))

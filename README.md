@@ -21,7 +21,10 @@ npm install
 npm run dev          # builds the engine to WebAssembly, then opens http://localhost:5173
 ```
 
-Drop a `.fseq` show and its `.wav`/`.mp3` onto the page, pick a vehicle, press Play.
+Drop a `.fseq` show and its `.wav`/`.mp3` onto the page, pick a vehicle, press Play (or
+**Space**; **← →** jump 5 s, **Home** goes back to the start). The car lights its body and the
+ground, and its doors, mirrors, windows, liftgate (Cybertruck: frunk) and charge port move as the
+show commands them; the seek bar shows the show's shape in the colours it lights.
 Development shortcut: `http://localhost:5173/?show=/@fs/<absolute path>.fseq&t=12000&vehicle=cybertruck`
 opens a file from disk at 12 s.
 
@@ -137,6 +140,8 @@ cd web && DROP=1 node scripts/party-e2e.mjs ../shows/<show>.fseq
 # speaker calibration (needs only `npm run dev`): detector on synthetic recordings, then the
 # whole browser pipeline with the tones wired into a fake microphone through a known delay
 cd web && node scripts/chirp-test.mjs && node scripts/calibrate-e2e.mjs
+# the car preview: glow, moving closures, demo, timeline, shortcuts (SHOTS=<dir> saves pictures)
+cd web && node scripts/car-test.mjs && node scripts/car-e2e.mjs ../shows/<tesla example 1>.fseq
 ```
 
 Load test: one host and many simulated phones join at once, play, load the next song and all
