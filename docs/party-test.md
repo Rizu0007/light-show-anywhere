@@ -30,10 +30,10 @@ keep screen awake, no flashlight, reconnected more than twice).
 
 | # | Do | Pass when |
 |---|----|-----------|
-| 1 | Every phone scans the QR code, accepts the certificate warning once and taps **Join** (tick *flashlight* on Android, *Help tune the sound* on two phones). | Each phone shows its light's name and "synced". The host lists every phone with no yellow, round trips under 150 ms. |
+| 1 | Every phone scans the QR code, accepts the certificate warning once and taps **Join** (tick *flashlight* on Android and iPhones with iOS 17+, *Help tune the sound* on two phones). | Each phone shows its light's name and "synced". The host lists every phone with no yellow, round trips under 150 ms. |
 | 2 | Leave the phones untouched for 3 minutes, show paused. | No phone's screen turns off. (Screen kept awake.) |
 | 3 | Press **Play** and watch the phones next to each other. | Phones on the same light change together; no visible lag between them. |
-| 4 | Android phones with the flashlight ticked. | The flashlight follows the light. A phone without one shows "no flashlight" on the host. |
+| 4 | Phones with the flashlight ticked (Android, iPhone with iOS 17+). | The flashlight follows the light. A phone that cannot shows "no flashlight: <reason>" and the host flags it. |
 | 5 | Pause. **Measure speaker delay**, then **Use … ms**. Play again. | Both listening phones heard the tones; the measurements are within ~20 ms of each other; after applying, the song and lights feel together. |
 | 6 | During playback, lock one phone's screen for 30 s, then unlock it. | It shows "reconnecting…" at most briefly, then plays in step with the others. Its screen stays on again afterwards: no "screen may sleep" for it on the host. |
 | 7 | During playback, turn Wi-Fi off on one phone for 20 s, then on. | It keeps playing while offline, then reconnects; the host shows it offline, then back on the same light without a warning (only more than two reconnects are flagged). |

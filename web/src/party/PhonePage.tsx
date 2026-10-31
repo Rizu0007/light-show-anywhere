@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { listenForTones } from "./calibrate";
+import { openTorch, type Torch } from "./torch";
 import { keepAwake } from "./wakeLock";
 import { ClockSync, startClockSync } from "./clock";
 import { connect, type Connection, type ServerMsg, type Track } from "./connection";
@@ -47,22 +48,6 @@ function saveToken(room: string, token: string | null) {
   }
 }
 
-/** Android Chrome can drive the camera flash; iPhone browsers cannot. */
-async function openTorch(): Promise<MediaStreamTrack | null> {
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
-    const track = stream.getVideoTracks()[0];
-    const capabilities = track.getCapabilities() as MediaTrackCapabilities & { torch?: boolean };
-    if (!capabilities.torch) {
-      track.stop();
-      return null;
-    }
-    return track;
-  } catch {
-    return null;
-  }
-}
-
 /** Where to stand: every place of the layout, this phone's one highlighted (audience at the
  *  bottom). */
 function PlaceMap({ places, mine }: { places: [number, number][]; mine: number }) {
@@ -89,7 +74,8 @@ export function PhonePage() {
   const [synced, setSynced] = useState(false);
   const [reconnecting, setReconnecting] = useState(false);
   const [useTorch, setUseTorch] = useState(false);
-  const [torchAvailable, setTorchAvailable] = useState<boolean | null>(null);
+  /** Why the flashlight is off, when the guest asked for it. */
+  const [torchProblem, setTorchProblem] = useState<string | null>(null);
   const [useMic, setUseMic] = useState(false);
   const [listening, setListening] = useState(false);
   const [awake, setAwake] = useState<boolean | null>(null);
@@ -103,8 +89,7 @@ export function PhonePage() {
   const showVersion = useRef<number | null>(null);
   const playback = useRef<Playback>({ playing: false, t0: null, positionMs: 0 });
   const roleRef = useRef<Role>(role);
-  const torch = useRef<MediaStreamTrack | null>(null);
-  const torchOn = useRef(false);
+  const torch = useRef<Torch | null>(null);
   const awakeRef = useRef<boolean | null>(null);
   const cleanup = useRef<(() => void)[]>([]);
 
@@ -154,9 +139,10 @@ export function PhonePage() {
       }
     }
     if (useTorch) {
-      torch.current = await openTorch();
-      setTorchAvailable(!!torch.current);
-      if (torch.current) cleanup.current.push(() => torch.current?.stop());
+      const result = await openTorch();
+      torch.current = result.torch;
+      setTorchProblem(result.problem);
+      if (result.torch) cleanup.current.push(() => result.torch.stop());
     }
 
     const code = room.trim();
@@ -317,13 +303,7 @@ export function PhonePage() {
       const k = level / 255;
       if (el) el.style.backgroundColor = `rgb(${Math.round(r * k)},${Math.round(g * k)},${Math.round(b * k)})`;
 
-      const wantTorch = level >= 128;
-      if (torch.current && wantTorch !== torchOn.current) {
-        torchOn.current = wantTorch;
-        void torch.current
-          .applyConstraints({ advanced: [{ torch: wantTorch } as MediaTrackConstraintSet] })
-          .catch(() => undefined);
-      }
+      torch.current?.set(level >= 128);
       frame = requestAnimationFrame(tick);
     };
     frame = requestAnimationFrame(tick);
@@ -347,7 +327,7 @@ export function PhonePage() {
         </label>
         <label className="check">
           <input type="checkbox" checked={useTorch} onChange={(e) => setUseTorch(e.target.checked)} />
-          <span>Also use the flashlight (Android)</span>
+          <span>Also use the flashlight (Android, or iPhone with iOS 17+)</span>
         </label>
         <label className="check">
           <input type="checkbox" checked={useMic} onChange={(e) => setUseMic(e.target.checked)} />
@@ -390,7 +370,7 @@ export function PhonePage() {
         <span>
           Room {room} · {reconnecting ? "reconnecting…" : synced ? "synced" : "syncing…"}
           {listening && " · listening to the speaker…"}
-          {torchAvailable === false && " · no flashlight"}
+          {torchProblem && ` · no flashlight: ${torchProblem}`}
           {!window.isSecureContext
             ? " · screen may sleep (not HTTPS)"
             : awake === false && " · screen may sleep: keep it on by hand"}
