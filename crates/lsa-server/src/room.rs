@@ -5,6 +5,7 @@
 use std::collections::{BTreeMap, HashMap};
 use std::hash::{BuildHasher, RandomState};
 
+use axum::body::Bytes;
 use lsa_fseq::Sequence;
 use lsa_tesla::{Channel, Rendered, Vehicle, render};
 use tokio::sync::mpsc::UnboundedSender;
@@ -64,8 +65,8 @@ const ROOM_CODE_ALPHABET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ";
 pub enum Outgoing {
     /// A JSON message.
     Text(ServerMsg),
-    /// A binary frame (light track).
-    Binary(Vec<u8>),
+    /// A binary frame (light track), shared by every phone that plays it.
+    Binary(Bytes),
 }
 
 /// Unique id of a connection.
@@ -157,8 +158,8 @@ struct LoadedShow {
 #[derive(Debug)]
 struct CarShow {
     rendered: Rendered,
-    /// Governed, encoded track of each playable light, made once instead of per phone.
-    tracks: HashMap<u16, Vec<u8>>,
+    /// Governed, encoded track of each playable light, made once and shared by its phones.
+    tracks: HashMap<u16, Bytes>,
 }
 
 impl LoadedShow {
@@ -200,7 +201,7 @@ impl LoadedShow {
             .iter()
             .map(|car| {
                 car.rendered.frame_count() * car.rendered.channel_count()
-                    + car.tracks.values().map(Vec::len).sum::<usize>()
+                    + car.tracks.values().map(Bytes::len).sum::<usize>()
             })
             .sum();
         Self {
@@ -219,7 +220,7 @@ impl LoadedShow {
     }
 
     /// The binary frame a phone playing `slot` receives.
-    fn track(&self, slot: Slot) -> Option<Vec<u8>> {
+    fn track(&self, slot: Slot) -> Option<Bytes> {
         let car = self.car(slot)?;
         car.tracks
             .get(&slot.channel)
@@ -228,16 +229,16 @@ impl LoadedShow {
     }
 }
 
-fn encode_car_track(version: u32, slot: Slot, rendered: &Rendered) -> Option<Vec<u8>> {
+fn encode_car_track(version: u32, slot: Slot, rendered: &Rendered) -> Option<Bytes> {
     let levels = rendered.channel_track(usize::from(slot.channel).checked_sub(1)?)?;
     let step_ms = rendered.step_time().as_millis() as u8;
-    Some(encode_track(
+    Some(Bytes::from(encode_track(
         version,
         slot.car,
         slot.channel,
         step_ms,
         &govern(&levels, step_ms),
-    ))
+    )))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]

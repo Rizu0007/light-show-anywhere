@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // The car preview in headless Chrome on Tesla's example show: the demo before a show loads, lamps
 // lighting the body and ground, doors, mirrors, liftgate and charge port moving on the car, the
-// timeline, keyboard shortcuts and the drop overlay. Needs `npm run dev`.
+// timeline, keyboard shortcuts and the drop overlay; and the exported video drawing the same.
+// Needs `npm run dev`.
 //   node scripts/car-e2e.mjs <lightshow_example_1.fseq>
 // SHOTS=<dir> also saves screenshots there.
 
@@ -100,6 +101,21 @@ try {
   check("charge port: open and lit", (await opacity(page, "[data-port-light]"))[0] === 1);
   const openRows = await page.evaluate(`document.querySelectorAll(".closure.open").length`);
   check("closure panel: open closures stand out", openRows >= 6, `${openRows} open`);
+
+  // The exported video draws the same: one frame each, measured where the parts are (view units).
+  const bright = (ms, view, box) => page.evaluate(`window.__lsaFrameBrightness(${ms}, "${view}", ${JSON.stringify(box)})`);
+  const aboveRoof = [150, 2, 330, 40];
+  const shut = await bright(0, "front", aboveRoof);
+  const raised = await bright(30000, "front", aboveRoof);
+  check("video: falcon doors hidden while closed, raised when open", shut < 25 && raised > 35, `${shut} → ${raised}`);
+  const cargo = await bright(30000, "rear", [160, 70, 240, 92]);
+  check("video: the cargo light under the lifted liftgate", cargo > 150, `${cargo}`);
+  const port = await bright(30000, "rear", [40, 122, 58, 144]);
+  check("video: the charge port light", port > 120, `${port}`);
+  // At 0:30 the left side repeater (picture right) is lit; nothing above the middle of the car is.
+  const pool = await bright(30000, "front", [330, 228, 385, 244]);
+  const unlit = await bright(30000, "front", [185, 228, 215, 244]);
+  check("video: a lit lamp lights the ground under it", pool > unlit + 40, `${pool} under the lamp, ${unlit} elsewhere`);
 
   // Lamps light their surroundings: every lit lamp has its bloom and a pool on the ground.
   const lighting = await page.evaluate(`(() => {

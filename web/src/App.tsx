@@ -12,7 +12,6 @@ import { useSyncedAudio } from "./party/useSyncedAudio";
 import { ExportButton } from "./video/ExportButton";
 
 const UI_UPDATE_MS = 100;
-/** How far the arrow keys jump. */
 const SEEK_STEP_MS = 5000;
 const SPEAKER_DELAY_KEY = "lsa.speakerDelayMs";
 const LAYOUT_KEY = "lsa.layout";
@@ -96,7 +95,7 @@ export function App() {
     try {
       localStorage.setItem(SPEAKER_DELAY_KEY, String(ms));
     } catch {
-      // Storage may be unavailable (private mode); the setting just isn't remembered.
+      // Private mode: not remembered.
     }
   }
 
@@ -148,7 +147,6 @@ export function App() {
     )
       .then((files) => loadFiles(files, (requested as Vehicle | null) ?? undefined))
       .catch((e: unknown) => setError(String(e)));
-    // Runs once when the engine is ready.
   }, [engineReady]);
 
   const currentMs = useCallback((): number => {
@@ -158,7 +156,6 @@ export function App() {
     return playing ? offsetMs + (performance.now() - startedAt) : offsetMs;
   }, [audioUrl, playing, party.active, party.positionNow]);
 
-  // Render loop: one emulated frame per screen refresh.
   useEffect(() => {
     if (!show) return;
     let frame = 0;
@@ -168,7 +165,7 @@ export function App() {
       const levels = show.levelsAt(ms);
       car.current?.update(levels);
       closures.current?.update(levels);
-      crowd.current?.update(fleet.map((s) => (s === show ? levels : s.levelsAt(ms))));
+      if (layout.length > 0) crowd.current?.update(fleet.map((s) => (s === show ? levels : s.levelsAt(ms))));
       if (now - lastUi > UI_UPDATE_MS) {
         lastUi = now;
         setTimeMs(ms);
@@ -181,7 +178,7 @@ export function App() {
     };
     frame = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(frame);
-  }, [show, fleet, playing, currentMs, revision, party.active]);
+  }, [show, fleet, playing, currentMs, revision, party.active, layout.length]);
 
   async function loadFiles(files: FileList | File[], forVehicle: Vehicle = vehicle) {
     setError(null);
@@ -455,6 +452,7 @@ export function App() {
             fleet={fleet}
             car={Math.max(0, fleet.indexOf(show))}
             bars={showBars}
+            vehicle={vehicle}
             layout={layout}
             title={showName}
             songUrl={audioUrl}

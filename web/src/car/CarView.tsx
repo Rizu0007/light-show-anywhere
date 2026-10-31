@@ -13,8 +13,15 @@ import {
 } from "./layout";
 import {
   CLOSURE,
+  FALCON,
   GROUND_Y,
   HALOS,
+  LID_FRUNK,
+  LID_HINGE_Y,
+  MIRROR,
+  ON_MIRROR,
+  PORT,
+  SIDE_WINDOW,
   bodyGlow,
   chargePortLight,
   falconAngle,
@@ -38,19 +45,6 @@ interface Props {
   nameOf: (channel: number) => string;
 }
 
-/** Side repeaters sit on the mirrors (front view), so they fold with them. */
-const ON_MIRROR = new Set([21, 22]);
-
-// Geometry of the moving parts, for the car's left side as seen from the front (picture right);
-// the right side and the rear view mirror it.
-const MIRROR = { pivotX: 298, pivotY: 97, stalk: "M296 95 L334 92 L334 97 L296 100 Z", housing: { x: 330, y: 84, w: 36, h: 15 } };
-const FALCON = { pivotX: 214, pivotY: 50, door: "M0 -5 L110 -9 Q118 -9 118 -2 L118 6 Q118 11 111 11 L0 6 Z", glass: "M14 -3 L84 -6 L84 3 L14 3 Z" };
-const SIDE_WINDOW = { points: "252,62 259,61 301,97 288,97", top: 61, bottom: 97 };
-/** Rear view, car's left (picture left): the charge port on the flank. */
-const PORT = { x: 43, y: 126, w: 10, h: 14 };
-const LID_FRUNK = "M118 97 L282 97 L298 108 L102 108 Z";
-
-/** Mirror image across the middle of the picture. */
 const FLIP = `translate(${VIEW_WIDTH} 0) scale(-1 1)`;
 
 const id = (view: View, name: string, color = "") => `${name}-${view}${color ? `-${color.slice(1)}` : ""}`;
@@ -88,14 +82,14 @@ function Lamp({ spot, view, nameOf }: { spot: LightSpot; view: View; nameOf: (ch
 
 const centreX = (shape: Shape) => (shape.kind === "rect" ? shape.x + shape.w / 2 : shape.cx);
 
-/** One side's mirror; `side` is the car's side, `flip` mirrors it to the other side of the picture. */
+/** The car's left mirror, or with `flip` its right one; `children` fold with it. */
 function Mirror({ channel, flip, children }: { channel: number; flip: boolean; children?: React.ReactNode }) {
   const { pivotX, pivotY, stalk, housing } = MIRROR;
   return (
     <g transform={flip ? FLIP : undefined}>
       <g className="mirror" data-mirror={channel} data-pivot={`${pivotX} ${pivotY}`}>
         <path className="body-part" d={stalk} />
-        <rect className="body-part" x={housing.x} y={housing.y} width={housing.w} height={housing.h} rx={5} />
+        <rect className="body-part" x={housing.x} y={housing.y} width={housing.w} height={housing.h} rx={housing.r} />
         {children && <g transform={flip ? FLIP : undefined}>{children}</g>}
       </g>
     </g>
@@ -248,8 +242,8 @@ function CarSvg({ view, vehicle, showBars, nameOf }: { view: View; vehicle: Vehi
 
       <SideWindow channel={windows.left} flip={leftFlip} view={view} />
       <SideWindow channel={windows.right} flip={!leftFlip} view={view} />
-      {view === "rear" && !frunk && <Lid view={view} d={BODY.glass} hingeY={62} glass />}
-      {view === "front" && frunk && <Lid view={view} d={LID_FRUNK} hingeY={97} glass={false} />}
+      {view === "rear" && !frunk && <Lid view={view} d={BODY.glass} hingeY={LID_HINGE_Y.liftgate} glass />}
+      {view === "front" && frunk && <Lid view={view} d={LID_FRUNK} hingeY={LID_HINGE_Y.frunk} glass={false} />}
       {view === "rear" && <ChargePort view={view} />}
 
       <Mirror channel={CLOSURE.mirror.left} flip={leftFlip}>
@@ -328,7 +322,6 @@ function findParts(root: HTMLElement): Parts {
   };
 }
 
-/** Scales by `sx`, `sy` about a pivot point (SVG transform). */
 const scaleAbout = ([px, py]: [number, number], sx: number, sy: number) =>
   `translate(${px} ${py}) scale(${sx.toFixed(3)} ${sy.toFixed(3)}) translate(${-px} ${-py})`;
 
@@ -363,9 +356,10 @@ export const CarView = forwardRef<CarViewHandle, Props>(function CarView({ showB
     for (const { el, channel, pivot } of p.mirrors) el.setAttribute("transform", scaleAbout(pivot, mirrorWidth(at(channel)), 1));
     for (const { el, channel } of p.falcons) el.setAttribute("transform", `rotate(${falconAngle(at(channel)).toFixed(2)})`);
     for (const { el, channel } of p.windows) {
-      const top = 61 + (97 - 61) * (1 - windowGlass(at(channel)));
-      el.setAttribute("y", top.toFixed(2));
-      el.setAttribute("height", (97 - top).toFixed(2));
+      const { top, bottom } = SIDE_WINDOW;
+      const glassTop = top + (bottom - top) * (1 - windowGlass(at(channel)));
+      el.setAttribute("y", glassTop.toFixed(2));
+      el.setAttribute("height", (bottom - glassTop).toFixed(2));
     }
     const lid = at(CLOSURE.liftgate);
     const pose = lidPose(lid);

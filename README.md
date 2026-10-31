@@ -1,14 +1,14 @@
 # Light Show Anywhere
 
 **Human Tesla:** play real Tesla light shows on a crowd of phones arranged as a car, where every
-phone is one light. See [docs/PLAN.md](docs/PLAN.md).
+phone is one light.
 
 ## Status
 
 | Crate | Purpose | State |
 |-------|---------|-------|
 | [`lsa-fseq`](crates/lsa-fseq) | Read and write FSEQ v2 sequences, check Tesla rules | ✅ Done |
-| [`lsa-tesla`](crates/lsa-tesla) | Channel map, light/closure decoding, Tesla ramp emulation | ✅ Done (see limits in docs) |
+| [`lsa-tesla`](crates/lsa-tesla) | Channel map, light/closure decoding, Tesla ramp emulation | ✅ Done |
 | [`lsa-wasm`](crates/lsa-wasm) | Browser bindings (129 KB WebAssembly) | ✅ Done |
 | [`web/`](web) | Viewer: front/rear car plays any show with its song | ✅ Done |
 | [`lsa-server`](crates/lsa-server) | Party server: rooms, clock sync, light assignment, per-phone tracks | ✅ Done |
@@ -81,7 +81,7 @@ by one, so the video is frame-exact and quicker than playing the show (a 30 s cl
 
 The **Phones** list shows each phone's network round trip and flags phones that will not play
 well: clock not synced, slow Wi-Fi, not HTTPS, screen may sleep, no flashlight, or frequent
-reconnects. Before a real party, run the [real-phone party test](docs/party-test.md).
+reconnects.
 
 Dropped connections are fine: a phone that loses Wi-Fi, locks its screen or reloads the page
 gets its light back when it returns, and keeps playing on its own meanwhile. If the host computer
@@ -164,11 +164,6 @@ cargo test --workspace --all-features   # run every test
 cargo fmt --all                         # format code
 cargo lint                              # strict lint (same as CI)
 cargo wasm-check                        # confirm the engine still builds for the browser
-
-# Tools (put shows in the git-ignored shows/ folder)
-cargo run -p lsa-fseq --example inspect -- shows/my-show.fseq           # header + channel values
-cargo run --release -p lsa-tesla --example render -- shows/my-show.fseq # emulate on every vehicle
-cargo run -p lsa-tesla --example demo_show -- shows/demo/chase.fseq     # 200-channel test show
 ```
 
 CI runs format, lint, tests and the browser build on every push
@@ -177,9 +172,9 @@ CI runs format, lint, tests and the browser build on every push
 ## Layout
 
 ```
-crates/        Rust crates (one folder per crate)
-docs/          Design notes
+crates/        Rust crates: lsa-fseq (files) → lsa-tesla (emulation) → lsa-wasm (browser),
+               lsa-server (party)
+web/           The app (React): preview, host, phones, video export
+docs/          Example WLED config
 .cargo/        Command aliases
 ```
-
-See [docs/architecture.md](docs/architecture.md) for how the parts fit together.

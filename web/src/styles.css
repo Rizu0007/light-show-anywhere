@@ -630,6 +630,10 @@ button.secondary {
   margin: 0;
 }
 
+.phone-brand {
+  justify-self: center;
+}
+
 .phone-intro p {
   margin: 0;
   color: var(--muted);
@@ -704,6 +708,11 @@ button.secondary {
   padding: 16px;
   display: grid;
   gap: 12px;
+}
+
+.layout h2 {
+  margin: 0 0 6px;
+  font-size: 1.1rem;
 }
 
 .layout-make,

@@ -40,7 +40,6 @@ export function Timeline({ levelsAt, durationMs, timeMs, onSeek, revision }: Pro
     }
     ctx.clearRect(0, 0, width, height);
     const middle = height / 2;
-    // The baseline: the whole show, dim.
     ctx.fillStyle = "#1d2430";
     ctx.fillRect(0, middle - ratio, width, 2 * ratio);
     const played = durationMs > 0 ? timeMs / durationMs : 0;
@@ -52,7 +51,6 @@ export function Timeline({ levelsAt, durationMs, timeMs, onSeek, revision }: Pro
       ctx.fillStyle = `rgba(${rgb.join(",")},${isPlayed ? 0.95 : 0.35})`;
       ctx.fillRect(b * slice, middle - half, Math.max(ratio, slice - ratio), 2 * half);
     });
-    // Playhead.
     if (durationMs > 0) {
       ctx.fillStyle = "#5aa0ff";
       ctx.fillRect(Math.min(width - 2 * ratio, played * width), 0, 2 * ratio, height);

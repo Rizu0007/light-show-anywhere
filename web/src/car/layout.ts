@@ -113,7 +113,7 @@ export const LIGHT_SPOTS: LightSpot[] = LEFT_SIDE.flatMap((spot) => {
   return [left, right];
 });
 
-/** Cybertruck light bars: [first channel, LED count, view, x range, y]. */
+/** Cybertruck light bars, drawn LED by LED from `x0` to `x1`. */
 export const LIGHT_BARS: {
   name: string;
   first: number;
@@ -138,6 +138,16 @@ export const CHANNEL_COLORS: ReadonlyMap<number, string> = (() => {
   return colors;
 })();
 
+const range = (first: number, count: number) => Array.from({ length: count }, (_, i) => first + i);
+
+/** Lights a phone or a layout place can play: the 30 exterior lights, then each Cybertruck light
+ *  bar LED by LED when the show has them. */
+export function lightGroups(bars: boolean): { name: string | null; channels: number[] }[] {
+  const lights = { name: bars ? "Lights" : null, channels: range(1, 30) };
+  if (!bars) return [lights];
+  return [lights, ...LIGHT_BARS.map((bar) => ({ name: bar.name, channels: range(bar.first, bar.count) }))];
+}
+
 /** Interior RGB zones: first channel of each R,G,B triple. */
 export const INTERIOR = {
   display: 176,
@@ -145,4 +155,4 @@ export const INTERIOR = {
 };
 
 /** Closures shown in the status panel, in channel order (31–46). */
-export const CLOSURE_CHANNELS = Array.from({ length: 16 }, (_, i) => 31 + i);
+export const CLOSURE_CHANNELS = range(31, 16);

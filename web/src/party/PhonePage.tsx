@@ -107,7 +107,6 @@ export function PhonePage() {
     if (!import.meta.env.DEV || !params.get("autojoin")) return;
     const timer = setTimeout(() => void join());
     return () => clearTimeout(timer);
-    // Runs once on mount.
   }, []);
 
   const joining = useRef(false);
@@ -313,6 +312,7 @@ export function PhonePage() {
   if (status === "intro" || status === "connecting") {
     return (
       <div className="phone-intro">
+        <span className="brand-mark phone-brand" aria-hidden="true" />
         <h1>Light Show Anywhere</h1>
         <p>Your phone becomes one light of the car.</p>
         <label>
