@@ -10,7 +10,7 @@ use lsa_tesla::{Channel, Rendered, Vehicle, render};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::lights::{color_of, playable_channels};
-use crate::protocol::{PhoneHealth, RosterEntry, ServerMsg, Spot, encode_track};
+use crate::protocol::{PhoneHealth, RosterEntry, ServerMsg, Spot, TRACK_HEADER_LEN, encode_track};
 use crate::safety::govern;
 
 /// Delay between a play command and the show actually starting, so every phone receives it
@@ -146,7 +146,7 @@ struct LoadedShow {
     name: String,
     vehicle: String,
     duration_ms: f64,
-    /// Decoded size of all its cars, counted against [`Limits::show_bytes`].
+    /// Memory it holds (rendered frames and tracks), counted against [`Limits::show_bytes`].
     bytes: usize,
     cars: Vec<CarShow>,
     /// Lights handed out to phones: each car's playable lights in priority order, interleaved
@@ -162,14 +162,7 @@ struct CarShow {
 }
 
 impl LoadedShow {
-    fn new(
-        version: u32,
-        name: &str,
-        vehicle: &str,
-        cars: Vec<Rendered>,
-        duration_ms: f64,
-        bytes: usize,
-    ) -> Self {
+    fn new(version: u32, name: &str, vehicle: &str, cars: Vec<Rendered>, duration_ms: f64) -> Self {
         let playable: Vec<Vec<u16>> = cars.iter().map(playable_channels).collect();
         let longest = playable.iter().map(Vec::len).max().unwrap_or(0);
         let slots = (0..longest)
@@ -202,7 +195,14 @@ impl LoadedShow {
                     .collect();
                 CarShow { rendered, tracks }
             })
-            .collect();
+            .collect::<Vec<_>>();
+        let bytes = cars
+            .iter()
+            .map(|car| {
+                car.rendered.frame_count() * car.rendered.channel_count()
+                    + car.tracks.values().map(Vec::len).sum::<usize>()
+            })
+            .sum();
         Self {
             version,
             name: name.chars().take(80).collect(),
@@ -260,6 +260,8 @@ struct Room {
     /// Phones in join order.
     members: BTreeMap<MemberId, Member>,
     show: Option<LoadedShow>,
+    /// Version the next show load gets (loads build outside the lock and may finish late).
+    next_version: u32,
     playback: Playback,
     /// Where phones stand; empty for the car shape, where phones are dealt lights directly.
     layout: Vec<Spot>,
@@ -300,6 +302,46 @@ pub struct Rooms {
     hasher: RandomState,
     counter: u64,
     limits: Limits,
+    /// Memory set aside for shows being built, by load (see [`Rooms::begin_load`]).
+    reserved: HashMap<u64, usize>,
+}
+
+/// A show upload that passed its checks and holds a share of the server's memory budget until
+/// [`Rooms::finish_load`]. Build it with [`ShowLoad::build`], outside the lock around [`Rooms`].
+#[derive(Debug)]
+#[must_use = "pass it to Rooms::finish_load, which releases its reservation"]
+pub struct ShowLoad {
+    id: u64,
+    host: MemberId,
+    room: String,
+    version: u32,
+    vehicle: Vehicle,
+    vehicle_name: String,
+    name: String,
+}
+
+/// A show parsed and rendered by [`ShowLoad::build`], ready for [`Rooms::finish_load`].
+#[derive(Debug)]
+pub struct BuiltShow(LoadedShow);
+
+impl ShowLoad {
+    /// Parses, renders and governs the show: the slow part of a load, which needs no lock.
+    pub fn build(&self, bytes: &[u8], sizes: &[u32]) -> Result<BuiltShow, String> {
+        let mut cars = Vec::new();
+        let mut duration_ms = 0.0f64;
+        for file in split_files(bytes, sizes)? {
+            let sequence = Sequence::parse(file).map_err(|e| e.to_string())?;
+            duration_ms = duration_ms.max(sequence.duration().as_secs_f64() * 1000.0);
+            cars.push(render(&sequence, self.vehicle));
+        }
+        Ok(BuiltShow(LoadedShow::new(
+            self.version,
+            &self.name,
+            &self.vehicle_name,
+            cars,
+            duration_ms,
+        )))
+    }
 }
 
 impl Rooms {
@@ -338,6 +380,7 @@ impl Rooms {
                 host_session: Session::new(tx, token),
                 members: BTreeMap::new(),
                 show: None,
+                next_version: 1,
                 playback: Playback::Paused { position_ms: 0.0 },
                 layout: Vec::new(),
                 roster_due: false,
@@ -491,6 +534,9 @@ impl Rooms {
     /// Host: loads a show, renders it for `vehicle`, and sends every phone its track. `bytes`
     /// holds one `.fseq` per car of a fleet show, back to back, with their lengths in `sizes`
     /// (empty for a single show).
+    ///
+    /// Renders while holding `self`; the server instead calls [`Rooms::begin_load`],
+    /// [`ShowLoad::build`] and [`Rooms::finish_load`] so other rooms keep going meanwhile.
     pub fn load_show(
         &mut self,
         host: MemberId,
@@ -499,24 +545,38 @@ impl Rooms {
         bytes: &[u8],
         sizes: &[u32],
     ) -> Result<(), String> {
-        // Shows held by every other room, counted against the server's budget.
+        let load = self.begin_load(host, vehicle_name, name, bytes, sizes)?;
+        let built = load.build(bytes, sizes);
+        self.finish_load(load, built)
+    }
+
+    /// Host: checks a show upload from its headers and reserves the memory building it takes
+    /// (the decoded file and its rendering, both held until it is built).
+    pub fn begin_load(
+        &mut self,
+        host: MemberId,
+        vehicle_name: &str,
+        name: &str,
+        bytes: &[u8],
+        sizes: &[u32],
+    ) -> Result<ShowLoad, String> {
+        // Shows held by every other room and loads being built, counted against the budget.
         let mine = self.membership.get(&host).cloned();
-        let others: usize = self
+        let held: usize = self
             .by_code
             .iter()
             .filter(|(code, _)| Some(*code) != mine.as_ref())
             .filter_map(|(_, room)| room.show.as_ref().map(|show| show.bytes))
+            .chain(self.reserved.values().copied())
             .sum();
         let budget = self.limits.show_bytes;
-        let room = self.hosted_room(host)?;
         let vehicle: Vehicle = Vehicle::from_id(vehicle_name)
             .ok_or_else(|| format!("unknown vehicle {vehicle_name}"))?;
         if bytes.len() > MAX_SHOW_BYTES {
             return Err("show file is too large".into());
         }
-        let files = split_files(bytes, sizes)?;
         let mut decoded = 0usize;
-        for file in &files {
+        for file in split_files(bytes, sizes)? {
             let header = lsa_fseq::Header::parse(file).map_err(|e| e.to_string())?;
             if header.remaps_channels() {
                 return Err(
@@ -529,18 +589,46 @@ impl Rooms {
         if decoded > MAX_DECODED_BYTES {
             return Err("show is too long".into());
         }
-        if others.saturating_add(decoded) > budget {
+        let building = decoded.saturating_mul(2);
+        let room_code = mine.ok_or("create a room first")?;
+        let room = self.hosted_room(host)?;
+        if held.saturating_add(building) > budget {
             return Err("the server is full: end another party first".into());
         }
-        let mut cars = Vec::with_capacity(files.len());
-        let mut duration_ms = 0.0f64;
-        for file in files {
-            let sequence = Sequence::parse(file).map_err(|e| e.to_string())?;
-            duration_ms = duration_ms.max(sequence.duration().as_secs_f64() * 1000.0);
-            cars.push(render(&sequence, vehicle));
+        let version = room.next_version;
+        room.next_version += 1;
+        self.counter += 1;
+        let id = self.counter;
+        self.reserved.insert(id, building);
+        Ok(ShowLoad {
+            id,
+            host,
+            room: room_code,
+            version,
+            vehicle,
+            vehicle_name: vehicle_name.to_owned(),
+            name: name.to_owned(),
+        })
+    }
+
+    /// Releases a load's reservation and, if it built and is still the room's latest, makes it
+    /// the room's show. A load that finishes after a newer one, or after its party ended, is
+    /// dropped.
+    pub fn finish_load(
+        &mut self,
+        load: ShowLoad,
+        built: Result<BuiltShow, String>,
+    ) -> Result<(), String> {
+        let ShowLoad { id, host, room, .. } = load;
+        self.reserved.remove(&id);
+        let BuiltShow(show) = built?;
+        if self.membership.get(&host) != Some(&room) {
+            return Err("room closed".into());
         }
-        let version = room.show.as_ref().map_or(1, |s| s.version + 1);
-        let show = LoadedShow::new(version, name, vehicle_name, cars, duration_ms, decoded);
+        let room = self.hosted_room(host)?;
+        if room.show.as_ref().is_some_and(|s| s.version > show.version) {
+            return Ok(());
+        }
 
         room.playback = Playback::Paused { position_ms: 0.0 };
         let message = show_msg(&show);
@@ -764,13 +852,19 @@ impl Rooms {
     /// The governed levels of one light of a room's show, for LED outputs.
     #[must_use]
     pub fn output_track(&self, room: &str, slot: Slot) -> Option<OutputTrack> {
-        let rendered = &self.by_code.get(room)?.show.as_ref()?.car(slot)?.rendered;
-        let levels = rendered.channel_track(usize::from(slot.channel).checked_sub(1)?)?;
+        let car = self.by_code.get(room)?.show.as_ref()?.car(slot)?;
+        let rendered = &car.rendered;
+        let index = usize::from(slot.channel).checked_sub(1)?;
         let step_ms = rendered.step_time().as_millis() as u8;
-        let channel = Channel::from_index(usize::from(slot.channel) - 1, rendered.channel_count());
+        // The phones' governed track when there is one, instead of governing it again.
+        let levels = match car.tracks.get(&slot.channel) {
+            Some(track) => track[TRACK_HEADER_LEN..].to_vec(),
+            None => govern(&rendered.channel_track(index)?, step_ms),
+        };
+        let channel = Channel::from_index(index, rendered.channel_count());
         Some(OutputTrack {
             step_ms,
-            levels: govern(&levels, step_ms),
+            levels,
             color: color_of(rendered.vehicle(), channel),
         })
     }

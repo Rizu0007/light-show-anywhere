@@ -10,12 +10,14 @@ pub mod tls;
 pub mod wled;
 
 use std::net::SocketAddr;
+use std::panic::AssertUnwindSafe;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use axum::Router;
+use axum::body::Bytes;
 use axum::extract::State;
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::response::Response;
@@ -254,11 +256,7 @@ async fn connection(socket: WebSocket, state: Arc<AppState>) {
                     reply_error(&tx, "send a load message before the show file".into());
                     continue;
                 };
-                let result =
-                    state
-                        .rooms()
-                        .load_show(id, &load.vehicle, &load.name, &bytes, &load.sizes);
-                if let Err(message) = result {
+                if let Err(message) = load_show(&state, id, load, bytes).await {
                     reply_error(&tx, message);
                 }
             }
@@ -281,6 +279,28 @@ async fn connection(socket: WebSocket, state: Arc<AppState>) {
         state.rooms().expire(id, epoch);
         state.schedule_rosters();
     }
+}
+
+/// Loads a show without holding the rooms lock while it renders: a long show takes a while, and
+/// every other room (and this one's phones) would wait.
+async fn load_show(
+    state: &AppState,
+    id: MemberId,
+    load: PendingLoad,
+    bytes: Bytes,
+) -> Result<(), String> {
+    let show = state
+        .rooms()
+        .begin_load(id, &load.vehicle, &load.name, &bytes, &load.sizes)?;
+    let (show, built) = tokio::task::spawn_blocking(move || {
+        // Caught so the show always reaches `finish_load`, which releases its memory reservation.
+        let built = std::panic::catch_unwind(AssertUnwindSafe(|| show.build(&bytes, &load.sizes)))
+            .unwrap_or_else(|_| Err("the show could not be rendered".into()));
+        (show, built)
+    })
+    .await
+    .map_err(|err| format!("loading the show failed: {err}"))?;
+    state.rooms().finish_load(show, built)
 }
 
 fn handle(
