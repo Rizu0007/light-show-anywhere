@@ -146,6 +146,9 @@ export function PhonePage() {
 
     const code = room.trim();
     let token = savedToken(code);
+    // This phone has had a place in the room. A room that is gone then means the party ended
+    // (while this phone was offline and missed "ended"), not that the code was wrong.
+    let hadPlace = token !== null;
     // Status for the host's roster: sent while in the room, whenever it changes.
     let inRoom = false;
     let opens = 0;
@@ -184,12 +187,14 @@ export function PhonePage() {
             saveToken(code, token);
             setStatus("joined");
             inRoom = true;
+            hadPlace = true;
             reportStatus();
             break;
           case "resumed":
             setMessage(null);
             setStatus("joined");
             inRoom = true;
+            hadPlace = true;
             reportStatus();
             break;
           case "expired":
@@ -235,6 +240,13 @@ export function PhonePage() {
             setStatus("ended");
             break;
           case "noRoom":
+            if (hadPlace) {
+              saveToken(code, null);
+              endSession();
+              setMessage("The party has ended.");
+              setStatus("ended");
+              break;
+            }
             // Wrong code: let the user try again.
             endSession();
             joining.current = false;

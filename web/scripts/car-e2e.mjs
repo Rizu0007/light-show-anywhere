@@ -146,6 +146,14 @@ try {
   await key(page, "Home");
   await sleep(200);
   check("Home goes back to the start", (await time(page)) === "0:00", await time(page));
+  // After clicking Play the button has focus: the arrows still seek, Space is the button's own.
+  await page.evaluate(`document.querySelector("button.play").focus()`);
+  await key(page, "ArrowRight", `document.querySelector("button.play")`);
+  await sleep(200);
+  check("→ seeks while the Play button has focus", (await time(page)) === "0:05", await time(page));
+  await key(page, " ", `document.querySelector("button.play")`);
+  await sleep(200);
+  check("Space on the focused Play button is left to the button", (await button(page)) === "Play");
   await key(page, " ", `document.querySelector(".layout input[type=number]")`);
   await sleep(200);
   check("Space in a text field does not play", (await button(page)) === "Play");
