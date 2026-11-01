@@ -20,7 +20,7 @@ const SONG = /\.(wav|mp3|m4a|ogg|flac)$/i;
 const MAX_CARS = 16;
 
 /** Keys typed into these are theirs, not shortcuts. */
-const FORM_CONTROL = "input, select, textarea, button, [contenteditable]";
+const FORM_CONTROL = "input, select, textarea, [contenteditable]";
 
 const PlayIcon = () => (
   <svg viewBox="0 0 16 16" aria-hidden="true" className="icon">
@@ -282,7 +282,10 @@ export function App() {
   const shortcut = useRef<(event: KeyboardEvent) => void>(() => undefined);
   shortcut.current = (event) => {
     if (!show || event.metaKey || event.ctrlKey || event.altKey) return;
-    if (event.target instanceof Element && event.target.closest(FORM_CONTROL)) return;
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest(FORM_CONTROL)) return;
+    // A focused button (Play, after a click) presses itself on Space; the arrows still seek.
+    if (event.key === " " && target?.closest("button")) return;
     const now = currentMs();
     if (event.key === " ") (isPlaying ? pause : play)();
     else if (event.key === "ArrowLeft") seek(Math.max(0, now - SEEK_STEP_MS));

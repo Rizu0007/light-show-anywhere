@@ -21,13 +21,18 @@ export const LayoutPanel = forwardRef<LayoutViewHandle, Props>(function LayoutPa
   ref,
 ) {
   const [shape, setShape] = useState<Shape>("grid");
-  const [cols, setCols] = useState(8);
-  const [rows, setRows] = useState(4);
-  const [count, setCount] = useState(16);
+  // Kept as typed, so a field can be cleared while editing; read through `number` when used.
+  const [cols, setCols] = useState("8");
+  const [rows, setRows] = useState("4");
+  const [count, setCount] = useState("16");
   const [view, setView] = useState<View>("front");
   const [selected, setSelected] = useState<number | null>(null);
 
-  const places = (): Place[] => (shape === "grid" ? grid(cols, rows) : shape === "line" ? line(count) : circle(count));
+  const number = (value: string, max: number) => Math.min(max, Math.max(1, Math.round(Number(value)) || 1));
+  const places = (): Place[] => {
+    const n = number(count, MAX_SPOTS);
+    return shape === "grid" ? grid(number(cols, 64), number(rows, 64)) : shape === "line" ? line(n) : circle(n);
+  };
   const make = () => {
     setSelected(null);
     onChange(mapLights(places().slice(0, MAX_SPOTS), view, cars, bars));
@@ -38,7 +43,6 @@ export const LayoutPanel = forwardRef<LayoutViewHandle, Props>(function LayoutPa
     setSelected(null);
     onChange(spots.filter((_, i) => i !== index));
   };
-  const number = (value: string, max: number) => Math.min(max, Math.max(1, Math.round(Number(value)) || 1));
   const spot = selected === null ? null : spots[selected];
   const missing = spots.filter((s) => s.car > cars).length;
 
@@ -59,12 +63,12 @@ export const LayoutPanel = forwardRef<LayoutViewHandle, Props>(function LayoutPa
           </select>
           {shape === "grid" ? (
             <>
-              <input type="number" value={cols} min={1} max={64} onChange={(e) => setCols(number(e.target.value, 64))} aria-label="Columns" />
+              <input type="number" value={cols} min={1} max={64} onChange={(e) => setCols(e.target.value)} onBlur={() => setCols(String(number(cols, 64)))} aria-label="Columns" />
               ×
-              <input type="number" value={rows} min={1} max={64} onChange={(e) => setRows(number(e.target.value, 64))} aria-label="Rows" />
+              <input type="number" value={rows} min={1} max={64} onChange={(e) => setRows(e.target.value)} onBlur={() => setRows(String(number(rows, 64)))} aria-label="Rows" />
             </>
           ) : (
-            <input type="number" value={count} min={1} max={MAX_SPOTS} onChange={(e) => setCount(number(e.target.value, MAX_SPOTS))} aria-label="Places" />
+            <input type="number" value={count} min={1} max={MAX_SPOTS} onChange={(e) => setCount(e.target.value)} onBlur={() => setCount(String(number(count, MAX_SPOTS)))} aria-label="Places" />
           )}
           <select value={view} onChange={(e) => setView(e.target.value as View)} aria-label="Car view">
             <option value="front">Front of the car</option>
