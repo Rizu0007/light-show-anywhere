@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 170" width="960" height="170" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+<defs><radialGradient id="bg" cx="50%" cy="0%" r="100%"><stop offset="0" stop-color="#141c2e"/><stop offset="1" stop-color="#070a10"/></radialGradient>
+<filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
+<rect width="960" height="170" rx="18" fill="url(#bg)"/>
+<path d="M139.0 66 H221.0" stroke="#2b3a5e" stroke-width="2"/>
+<circle r="3" fill="#5aa0ff" filter="url(#glow)"><animateMotion path="M139.0 66 H221.0" dur="1.2s" begin="0.0s" repeatCount="indefinite"/></circle>
+<circle cx="105.0" cy="66" r="26" fill="#5aa0ff" fill-opacity="0.12" stroke="#5aa0ff" stroke-width="2"/>
+<circle cx="105.0" cy="66" r="26" fill="none" stroke="#5aa0ff" stroke-opacity="0.5" stroke-width="5" filter="url(#glow)"><animate attributeName="stroke-opacity" values="0.1;0.7;0.1" dur="3.0s" begin="0.0s" repeatCount="indefinite"/></circle>
+<text x="105.0" y="73" fill="#5aa0ff" font-size="20" font-weight="800" text-anchor="middle">1</text>
+<text x="105.0" y="122" fill="#eef3fb" font-size="14" font-weight="700" text-anchor="middle">Start server</text>
+<text x="105.0" y="142" fill="#93a3bf" font-size="11.5" text-anchor="middle">--tls</text>
+<path d="M289.0 66 H371.0" stroke="#2b3a5e" stroke-width="2"/>
+<circle r="3" fill="#5aa0ff" filter="url(#glow)"><animateMotion path="M289.0 66 H371.0" dur="1.2s" begin="0.2s" repeatCount="indefinite"/></circle>
+<circle cx="255.0" cy="66" r="26" fill="#5aa0ff" fill-opacity="0.12" stroke="#5aa0ff" stroke-width="2"/>
+<circle cx="255.0" cy="66" r="26" fill="none" stroke="#5aa0ff" stroke-opacity="0.5" stroke-width="5" filter="url(#glow)"><animate attributeName="stroke-opacity" values="0.1;0.7;0.1" dur="3.0s" begin="0.5s" repeatCount="indefinite"/></circle>
+<text x="255.0" y="73" fill="#5aa0ff" font-size="20" font-weight="800" text-anchor="middle">2</text>
+<text x="255.0" y="122" fill="#eef3fb" font-size="14" font-weight="700" text-anchor="middle">Load show</text>
+<text x="255.0" y="142" fill="#93a3bf" font-size="11.5" text-anchor="middle">.fseq + song</text>
+<path d="M439.0 66 H521.0" stroke="#2b3a5e" stroke-width="2"/>
+<circle r="3" fill="#cfe3ff" filter="url(#glow)"><animateMotion path="M439.0 66 H521.0" dur="1.2s" begin="0.4s" repeatCount="indefinite"/></circle>
+<circle cx="405.0" cy="66" r="26" fill="#cfe3ff" fill-opacity="0.12" stroke="#cfe3ff" stroke-width="2"/>
+<circle cx="405.0" cy="66" r="26" fill="none" stroke="#cfe3ff" stroke-opacity="0.5" stroke-width="5" filter="url(#glow)"><animate attributeName="stroke-opacity" values="0.1;0.7;0.1" dur="3.0s" begin="1.0s" repeatCount="indefinite"/></circle>
+<text x="405.0" y="73" fill="#cfe3ff" font-size="20" font-weight="800" text-anchor="middle">3</text>
+<text x="405.0" y="122" fill="#eef3fb" font-size="14" font-weight="700" text-anchor="middle">Start party</text>
+<text x="405.0" y="142" fill="#93a3bf" font-size="11.5" text-anchor="middle">QR code</text>
+<path d="M589.0 66 H671.0" stroke="#2b3a5e" stroke-width="2"/>
+<circle r="3" fill="#ffb020" filter="url(#glow)"><animateMotion path="M589.0 66 H671.0" dur="1.2s" begin="0.6000000000000001s" repeatCount="indefinite"/></circle>
+<circle cx="555.0" cy="66" r="26" fill="#ffb020" fill-opacity="0.12" stroke="#ffb020" stroke-width="2"/>
+<circle cx="555.0" cy="66" r="26" fill="none" stroke="#ffb020" stroke-opacity="0.5" stroke-width="5" filter="url(#glow)"><animate attributeName="stroke-opacity" values="0.1;0.7;0.1" dur="3.0s" begin="1.5s" repeatCount="indefinite"/></circle>
+<text x="555.0" y="73" fill="#ffb020" font-size="20" font-weight="800" text-anchor="middle">4</text>
+<text x="555.0" y="122" fill="#eef3fb" font-size="14" font-weight="700" text-anchor="middle">Guests join</text>
+<text x="555.0" y="142" fill="#93a3bf" font-size="11.5" text-anchor="middle">scan + tap Join</text>
+<path d="M739.0 66 H821.0" stroke="#2b3a5e" stroke-width="2"/>
+<circle r="3" fill="#ffb020" filter="url(#glow)"><animateMotion path="M739.0 66 H821.0" dur="1.2s" begin="0.8s" repeatCount="indefinite"/></circle>
+<circle cx="705.0" cy="66" r="26" fill="#ffb020" fill-opacity="0.12" stroke="#ffb020" stroke-width="2"/>
+<circle cx="705.0" cy="66" r="26" fill="none" stroke="#ffb020" stroke-opacity="0.5" stroke-width="5" filter="url(#glow)"><animate attributeName="stroke-opacity" values="0.1;0.7;0.1" dur="3.0s" begin="2.0s" repeatCount="indefinite"/></circle>
+<text x="705.0" y="73" fill="#ffb020" font-size="20" font-weight="800" text-anchor="middle">5</text>
+<text x="705.0" y="122" fill="#eef3fb" font-size="14" font-weight="700" text-anchor="middle">Stand as car</text>
+<text x="705.0" y="142" fill="#93a3bf" font-size="11.5" text-anchor="middle">one light each</text>
+<circle cx="855.0" cy="66" r="26" fill="#3dffa8" fill-opacity="0.12" stroke="#3dffa8" stroke-width="2"/>
+<circle cx="855.0" cy="66" r="26" fill="none" stroke="#3dffa8" stroke-opacity="0.5" stroke-width="5" filter="url(#glow)"><animate attributeName="stroke-opacity" values="0.1;0.7;0.1" dur="3.0s" begin="2.5s" repeatCount="indefinite"/></circle>
+<text x="855.0" y="73" fill="#3dffa8" font-size="20" font-weight="800" text-anchor="middle">6</text>
+<text x="855.0" y="122" fill="#eef3fb" font-size="14" font-weight="700" text-anchor="middle">Play</text>
+<text x="855.0" y="142" fill="#93a3bf" font-size="11.5" text-anchor="middle">all flash together</text>
+</svg>

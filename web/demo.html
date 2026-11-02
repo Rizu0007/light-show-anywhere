@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Light Show Anywhere: demo video</title>
+    <style>
+      body { margin: 0; background: #05070a; color: #e6ebf2; font: 15px system-ui, sans-serif; display: grid; place-items: center; min-height: 100vh; }
+      canvas { width: min(96vw, 1280px); aspect-ratio: 16 / 9; border-radius: 10px; box-shadow: 0 0 0 1px #1d2430; }
+      .bar { display: flex; gap: 12px; align-items: center; margin-top: 12px; }
+      button { background: #5aa0ff; color: #05070a; border: 0; border-radius: 8px; padding: 8px 16px; font-weight: 600; cursor: pointer; }
+    </style>
+  </head>
+  <body>
+    <div>
+      <canvas id="demo" width="1280" height="720"></canvas>
+      <div class="bar"><button id="render">Render MP4</button><span id="status">Loading…</span></div>
+    </div>
+    <script type="module" src="/src/demo/demo.ts"></script>
+  </body>
+</html>

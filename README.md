@@ -1,180 +1,201 @@
-# Light Show Anywhere
+<div align="center">
 
-**Human Tesla:** play real Tesla light shows on a crowd of phones arranged as a car, where every
-phone is one light.
+# 💡 Light Show Anywhere
 
-## Status
+**Turn a crowd of phones into a Tesla light show.**
 
-| Crate | Purpose | State |
-|-------|---------|-------|
-| [`lsa-fseq`](crates/lsa-fseq) | Read and write FSEQ v2 sequences, check Tesla rules | ✅ Done |
-| [`lsa-tesla`](crates/lsa-tesla) | Channel map, light/closure decoding, Tesla ramp emulation | ✅ Done |
-| [`lsa-wasm`](crates/lsa-wasm) | Browser bindings (129 KB WebAssembly) | ✅ Done |
-| [`web/`](web) | Viewer: front/rear car plays any show with its song | ✅ Done |
-| [`lsa-server`](crates/lsa-server) | Party server: rooms, clock sync, light assignment, per-phone tracks | ✅ Done |
+Every phone becomes one light of the car, and all of them flash together with the music.<br>
+No app to install and no Tesla needed: guests just scan a QR code.
 
-## Run the viewer
+![Rust](https://img.shields.io/badge/Rust-engine%20%26%20server-orange?logo=rust)
+![WebAssembly](https://img.shields.io/badge/WebAssembly-in%20the%20browser-654FF0?logo=webassembly&logoColor=white)
+![React](https://img.shields.io/badge/React-app-61DAFB?logo=react&logoColor=black)
+![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
+
+<img src="docs/media/demo.gif" alt="A crowd holds up their phones; together their flashlights play the car's lights" width="720">
+
+</div>
+
+---
+
+## 📑 Contents
+
+- [What it does](#-what-it-does)
+- [Features](#-features)
+- [Quick start](#-quick-start)
+- [Host a party](#-host-a-party)
+- [How it works](#-how-it-works)
+- [Project structure](#-project-structure)
+- [Development](#-development)
+- [Demo video](#-demo-video)
+
+---
+
+## ✨ What it does
+
+Tesla cars can play light shows: a song, plus a file (`.fseq`) that says which light is on at
+every moment. **Light Show Anywhere plays those shows on people instead of a car.**
+
+| 1. Load | 2. Join | 3. Play |
+|:---:|:---:|:---:|
+| The host opens a show and its song on a laptop. | Guests scan the QR code. Each phone gets one light: left headlight, right turn signal… | Everyone stands in the shape of a car and lifts their phone. The crowd lights up like the car. |
+
+---
+
+## 🚀 Features
+
+| | Feature | What it means |
+|---|---|---|
+| 🚗 | **Car preview** | Watch any show on an animated Model S, Model X, Model 3/Y or Cybertruck before the party. |
+| 📱 | **Phone party** | Phones join from the browser. Each gets its own light and plays it with screen and flashlight. |
+| ⏱️ | **Clock sync** | Every phone follows the server's clock, so they all flash together (within a few hundredths of a second). |
+| 🛡️ | **Flash safety** | Fast strobes are slowed to at most 3 flashes a second, safe for people with photosensitive epilepsy. |
+| 🔊 | **Speaker delay** | Phones can listen to the speaker and measure its delay, so Bluetooth speakers stay in time. |
+| 🔷 | **Crowd layouts** | Use a grid, line or circle of up to 4096 places instead of the car shape. |
+| 🚙 | **Fleet shows** | Tesla's multi-car shows split the phones across several cars. |
+| 🌈 | **LED strips** | [WLED](https://kno.wled.ge) strips can join as extra lights. |
+| 🎬 | **Video export** | Save the preview with its song as an MP4. |
+| 📶 | **Handles dropouts** | A phone that loses Wi-Fi keeps playing and gets its light back. If the host reloads, the party goes on. |
+
+---
+
+## ⚡ Quick start
+
+### Requirements
+
+- [Rust](https://rustup.rs) (the right version installs itself from `rust-toolchain.toml`)
+- [Node.js 24](https://nodejs.org) and [wasm-pack](https://rustwasm.github.io/wasm-pack/)
+
+### Watch a show on your computer
 
 ```bash
-cd web
+git clone https://github.com/Rizu0007/light-show-anywhere.git
+cd light-show-anywhere/web
 npm install
-npm run dev          # builds the engine to WebAssembly, then opens http://localhost:5173
+npm run dev                 # opens http://localhost:5173
 ```
 
-Drop a `.fseq` show and its `.wav`/`.mp3` onto the page, pick a vehicle, press Play (or
-**Space**; **← →** jump 5 s, **Home** goes back to the start). The car lights its body and the
-ground, and its doors, mirrors, windows, liftgate (Cybertruck: frunk) and charge port move as the
-show commands them; the seek bar shows the show's shape in the colours it lights.
-Development shortcut: `http://localhost:5173/?show=/@fs/<absolute path>.fseq&t=12000&vehicle=cybertruck`
-opens a file from disk at 12 s.
+Drop a `.fseq` show and its `.wav` or `.mp3` song onto the page, then press **Play**.
 
-## Run a party (phones as lights)
+> **No show yet?** Run `scripts/fetch-tesla-example.sh` to download Tesla's example into `shows/`.
 
-Phones only keep the screen awake and use the flashlight on **HTTPS** pages, so a real party runs
-with `--tls`. The server then makes its own certificate for this computer's network addresses and
-keeps it in `.lsa-tls/` (git-ignored).
+| Key | Action |
+|---|---|
+| `Space` | Play / pause |
+| `←` `→` | Jump 5 seconds |
+| `Home` | Back to the start |
+
+---
+
+## 🎉 Host a party
+
+Phones only turn on the flashlight and keep the screen awake on **HTTPS** pages, so start the
+server with `--tls`. It makes its own certificate.
 
 ```bash
 (cd web && npm install && npm run build)
-cargo run --release -p lsa-server -- --tls --static web/dist   # app + party server on :8787
+cargo run --release -p lsa-server -- --tls --static web/dist    # app + party server on port 8787
 ```
 
-1. On the host computer, open the **https://** network address the server prints (e.g.
-   `https://192.168.1.20:8787`), not `localhost`, since phones cannot reach that. Accept the
-   certificate warning once.
-2. Load a show (and its song), press **Start party**, show the QR code.
-3. Phones on the same Wi-Fi scan it and tap **Join**. Each phone warns about the certificate once
-   (Chrome: *Advanced → Proceed*; Safari: *Show Details → visit this website*). Each becomes one
-   light.
-4. Press **Play**. If sound arrives after the lights (Bluetooth speakers), set **Speaker
-   delay**, or let the phones measure it: guests who tick *Help tune the sound* lend their
-   microphone, **Measure speaker delay** plays five short tones through the speaker, and
-   **Use … ms** applies the median of what the phones heard. Measure with the speaker you will
-   use for the song, with the show paused.
+<p align="center"><img src="docs/media/party-steps.svg" alt="Start server, load show, start party, guests join, stand as the car, play" width="100%"></p>
 
-**Fleet shows** (Tesla's multi-car shows: one `.fseq` per car in `Car #1`, `Car #2`… folders)
-load with **Fleet show (folder)**. Phones are dealt across the cars, every car's headlights
-first, and each phone shows its car number in large type: group the guests by car, numbered
-left to right as seen from the front. **Preview car** picks which car the preview shows; the
-host can move a phone to any car's light.
+1. On the host computer, open the **https://** address the server prints (for example
+   `https://192.168.1.20:8787`), not `localhost`. Accept the certificate warning once.
+2. Load a show and its song, then press **Start party**.
+3. Guests on the **same Wi-Fi** scan the QR code and tap **Join the show**. Each phone warns
+   about the certificate once (Chrome: *Advanced → Proceed*; Safari: *Show Details → visit this
+   website*).
+4. Each phone shows its light. Place people where that light is on the car.
+5. Press **Play**. The **Phones** list warns about any phone that won't play well.
 
-**Crowd layouts** free the phones from the car shape. Under **Crowd layout**, make a grid,
-line or circle of places (up to 4096): each place plays the nearest light of the car picture
-(front or rear), so the crowd draws the car; a fleet show splits the layout left to right by
-car. Drag places to move them, double-click to add one, pick a place's light, or press Delete.
-Phones then show their place number and a map with their spot, and the preview lights the
-crowd as it will look. A new song keeps everyone in their place; **Use the car shape** goes
-back.
+<details>
+<summary><b>More options</b> (speaker delay, crowd layouts, fleet shows, LED strips, limits)</summary>
 
-**LED strips** running [WLED](https://kno.wled.ge) can join in: list them in a file and start
-the server with `--wled wled.json` (see [`docs/wled.example.json`](docs/wled.example.json)).
-Each run of LEDs plays one light, or one channel per LED to make a strip a Cybertruck light
-bar (`"per_led": true`). Strips play the room that last pressed **Play**, in step with the
-phones, in the lights' colours and through the same flash limit, over DDP (UDP port 4048).
-When the party ends they go back to their own effects. Only the server's operator chooses the
-strips; hosts cannot point the server's packets elsewhere.
+<br>
 
-**Export video** (next to the show's details) saves the preview with the song as a 1280 × 720
-video: MP4 (H.264 + AAC) where the browser can make it, otherwise WebM. Frames are rendered one
-by one, so the video is frame-exact and quicker than playing the show (a 30 s clip takes about
-9 s). With a crowd layout, tick *film the crowd layout* to film the crowd instead of the car.
+| Option | How to use it |
+|---|---|
+| **Speaker delay** | If the sound comes after the lights, set **Speaker delay**, or press **Measure speaker delay**. Guests who tick *Help tune the sound* listen to five short tones. Measure with the show paused. |
+| **Crowd layout** | Make a grid, line or circle of places. Drag places to move them, double-click to add one, press Delete to remove one. **Use the car shape** goes back. |
+| **Fleet show** | Load the show's folder with **Fleet show (folder)**. Each phone shows its car number; group guests by car, numbered left to right as seen from the front. |
+| **LED strips** | List WLED devices in a file and start with `--wled wled.json` (see [`docs/wled.example.json`](docs/wled.example.json)). |
+| **Your own certificate** | Use `--cert cert.pem --key key.pem` instead of `--tls`. |
+| **Limits** | One server holds 64 parties and serves 2000 phones. The Wi-Fi router is usually the real limit, so use access points made for crowds. |
 
-The **Phones** list shows each phone's network round trip and flags phones that will not play
-well: clock not synced, slow Wi-Fi, not HTTPS, screen may sleep, no flashlight, or frequent
-reconnects.
+</details>
 
-Dropped connections are fine: a phone that loses Wi-Fi, locks its screen or reloads the page
-gets its light back when it returns, and keeps playing on its own meanwhile. If the host computer
-drops, or its tab is reloaded, phones keep playing and the host takes the room back (a
-reloaded tab does not re-send the same show, so nothing restarts). A place is kept
-for 2 minutes; **End party** closes the room at once.
+---
 
-One server holds at most 64 parties and 1 GB of decoded shows between them (a long 200-channel
-show is about 100 MB), so nobody on the network can exhaust it; past that it answers "the server
-is full". Shows whose sparse channel ranges move the channels are refused rather than played on
-the wrong lights (Tesla's tools do not write them).
+## 🧠 How it works
 
-How many phones? The server is not the limit: in its load test one laptop serves 2000 phones,
-which all get their light within 0.7 s of joining together, hear about **Play** within 25 ms
-(the show starts 1 s after the press) and are all back 0.8 s after a Wi-Fi blip. The Wi-Fi is the
-limit: home routers often struggle beyond a few dozen devices, so for a big crowd use a router
-or access points built for many clients.
+<p align="center"><img src="docs/media/architecture.svg" alt="The host laptop sends the show to lsa-server, which sends each phone its own light track; the crowd stands in the shape of the car" width="100%"></p>
 
-The certificate is reused, so phones are not warned again. It is renewed (and phones warn once
-more) when the computer joins a network it does not cover yet, or a month before it expires. With
-a real certificate for a domain, use `--cert cert.pem --key key.pem` instead of `--tls`.
+<p align="center"><img src="docs/media/pipeline.svg" alt="Show file, read, act like the car, flash safety, one track per phone" width="100%"></p>
 
-While developing, run the app with Vite instead (hot reload):
+<p align="center"><img src="docs/media/sync.svg" alt="Phones sync their clocks with the server; Play sets a start time T one second later, and every phone starts at T" width="100%"></p>
+
+1. **Read:** the `.fseq` file is a table of brightness values, one row every 20 ms and one
+   column per light.
+2. **Act like the car:** the engine copies how a Tesla behaves: lights fade in and out, and
+   doors and mirrors move.
+3. **Give out lights:** each new phone gets the light with the fewest phones on it, so headlights
+   fill first.
+4. **Send tracks:** each phone gets only its own light's track, with fast flashes slowed down.
+5. **Play together:** Play starts 1 second in the future on the server's clock. Every phone knows
+   that clock, so they all start at the same moment.
+
+---
+
+## 📁 Project structure
+
+```
+light-show-anywhere/
+├── crates/
+│   ├── lsa-fseq/      Reads and writes .fseq show files, checks Tesla's rules
+│   ├── lsa-tesla/     Tesla light map and car emulation (fades, doors, mirrors)
+│   ├── lsa-wasm/      The engine compiled to WebAssembly for the browser
+│   └── lsa-server/    Party server: rooms, clock sync, lights, safety, WLED, HTTPS
+├── web/               React app: car preview, host page, phone page, video export
+│   ├── src/
+│   └── scripts/       Browser tests and the demo video scripts
+├── docs/              Development guide, demo video playbook, WLED example
+└── scripts/           Downloads Tesla's example show
+```
+
+| Part | Built with |
+|---|---|
+| Engine | Rust, compiled to WebAssembly |
+| Server | Rust, axum, WebSockets |
+| App | React, TypeScript, Vite |
+| Video export | Mediabunny |
+
+---
+
+## 🛠️ Development
 
 ```bash
-cargo run --release -p lsa-server -- --tls   # terminal 1: party server (creates .lsa-tls/ first)
-cd web && npm run dev:https                  # terminal 2: app on https://<address>:5173
+cargo test --workspace --all-features   # Rust tests
+cd web && scripts/e2e.sh                # browser tests with headless-Chrome phones
 ```
 
-`npm run dev` and a server without `--tls` work over plain `http`; the lights work, but phones
-may sleep and the flashlight is off.
+Hot reload, every test, the 2000-phone load test and more: **[docs/development.md](docs/development.md)**.
 
-Tests that play Tesla's official example show need it downloaded once (into the git-ignored
-`shows/`; CI does the same and fails rather than skipping them):
+---
 
-```bash
-scripts/fetch-tesla-example.sh
-```
+## 🎬 Demo video
 
-Every browser test with real headless-Chrome phones (or Safari windows with `BROWSER=safari`,
-after ticking *Allow remote automation* in Safari's Developer settings), as CI runs them (starts and stops both
-servers itself; needs Chrome, `npm ci` and `npm run wasm` in `web/`):
+A 92-second narrated video shows how to use the app and how it works, with a night scene of a
+crowd lighting up together. It is made entirely in code. To build it, see
+[docs/development.md](docs/development.md#demo-video); the video is saved to
+`media/light-show-anywhere-demo.mp4`.
 
-```bash
-cd web && scripts/e2e.sh
-```
+Want the same kind of video for another project? Follow
+**[docs/demo-video-playbook.md](docs/demo-video-playbook.md)**.
 
-Or one at a time, with both servers running:
+---
 
-```bash
-cd web && node scripts/party-e2e.mjs ../shows/<show>.fseq [channel] [seconds]
-# over HTTPS (lsa-server --tls, npm run dev:https):
-cd web && APP=https://localhost:5173 node scripts/party-e2e.mjs ../shows/<show>.fseq
-# cut phone 1's connection halfway; it must reconnect and keep time:
-cd web && DROP=1 node scripts/party-e2e.mjs ../shows/<show>.fseq
-# speaker calibration (needs only `npm run dev`): detector on synthetic recordings, then the
-# whole browser pipeline with the tones wired into a fake microphone through a known delay
-cd web && node scripts/chirp-test.mjs && node scripts/calibrate-e2e.mjs
-# the car preview: glow, moving closures, demo, timeline, shortcuts (SHOTS=<dir> saves pictures)
-cd web && node scripts/car-test.mjs && node scripts/car-e2e.mjs ../shows/<tesla example 1>.fseq
-```
+<div align="center">
 
-Load test: one host and many simulated phones join at once, play, load the next song and all
-reconnect after a Wi-Fi blip (200 phones in `cargo test`; more with `LSA_LOAD_PHONES`):
+Third-party code and licenses: see [NOTICE](NOTICE).
 
-```bash
-LSA_LOAD_PHONES=2000 cargo test --release -p lsa-server --test load -- --nocapture
-```
-
-## Requirements
-
-- [rustup](https://rustup.rs). `rust-toolchain.toml` installs the exact Rust version,
-  `rustfmt`, `clippy` and the `wasm32-unknown-unknown` target automatically.
-- Node 24 LTS (for the web app, later).
-
-## Everyday commands
-
-```bash
-cargo test --workspace --all-features   # run every test
-cargo fmt --all                         # format code
-cargo lint                              # strict lint (same as CI)
-cargo wasm-check                        # confirm the engine still builds for the browser
-```
-
-CI runs format, lint, tests and the browser build on every push
-(`.github/workflows/ci.yml`).
-
-## Layout
-
-```
-crates/        Rust crates: lsa-fseq (files) → lsa-tesla (emulation) → lsa-wasm (browser),
-               lsa-server (party)
-web/           The app (React): preview, host, phones, video export
-docs/          Example WLED config
-.cargo/        Command aliases
-```
+</div>

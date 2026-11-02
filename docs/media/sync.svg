@@ -1,0 +1,114 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 400" width="960" height="400" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+<defs>
+<radialGradient id="bg" cx="70%" cy="40%" r="90%"><stop offset="0" stop-color="#141c2e"/><stop offset="1" stop-color="#070a10"/></radialGradient>
+<linearGradient id="tline" gradientUnits="userSpaceOnUse" x1="0" y1="98" x2="0" y2="338"><stop offset="0" stop-color="#3dffa8" stop-opacity="0"/><stop offset="0.15" stop-color="#3dffa8"/><stop offset="0.85" stop-color="#3dffa8"/><stop offset="1" stop-color="#3dffa8" stop-opacity="0"/></linearGradient>
+<filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+<marker id="ah" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L8 4 L0 8 Z" fill="#5aa0ff"/></marker>
+</defs>
+<rect width="960" height="400" rx="18" fill="url(#bg)"/>
+<text x="36" y="48" fill="#5aa0ff" font-size="13" font-weight="700" letter-spacing="2.5">HOW EVERY PHONE FLASHES AT ONCE</text>
+<text x="36" y="76" fill="#eef3fb" font-size="22" font-weight="700">One shared clock, one start time</text>
+<rect x="150" y="98" width="400" height="246" rx="10" fill="#5aa0ff" fill-opacity="0.04"/>
+<text x="355.0" y="366" fill="#93a3bf" font-size="12" text-anchor="middle">① Phones ask the server the time every 2 s and keep the fastest answer</text>
+<text x="750.0" y="366" fill="#93a3bf" font-size="12" text-anchor="middle">② Play → start at T, 1 s later</text>
+<text x="537.0" y="388" fill="#7f8fae" font-size="11" text-anchor="middle">Each phone knows how far its clock is from the server, so "T on the server" is the same moment everywhere.</text>
+<text x="36" y="126" fill="#eef3fb" font-size="13.5" font-weight="700">Server</text>
+<line x1="150" y1="122" x2="924" y2="122" stroke="#2b3a5e" stroke-width="1.5"/>
+<text x="36" y="196" fill="#eef3fb" font-size="13.5" font-weight="700">Phone A</text>
+<text x="36" y="212" fill="#7f8fae" font-size="10.5">clock +37 ms</text>
+<line x1="150" y1="192" x2="924" y2="192" stroke="#2b3a5e" stroke-width="1.5"/>
+<text x="36" y="256" fill="#eef3fb" font-size="13.5" font-weight="700">Phone B</text>
+<text x="36" y="272" fill="#7f8fae" font-size="10.5">clock −112 ms</text>
+<line x1="150" y1="252" x2="924" y2="252" stroke="#2b3a5e" stroke-width="1.5"/>
+<text x="36" y="316" fill="#eef3fb" font-size="13.5" font-weight="700">Phone C</text>
+<text x="36" y="332" fill="#7f8fae" font-size="10.5">clock +6 ms</text>
+<line x1="150" y1="312" x2="924" y2="312" stroke="#2b3a5e" stroke-width="1.5"/>
+<path d="M190 188 V130" stroke="#5aa0ff" stroke-opacity="0.7" stroke-width="1.4" fill="none" marker-end="url(#ah)" stroke-dasharray="3 3"/>
+<path d="M197 128 V186" stroke="#5aa0ff" stroke-opacity="0.7" stroke-width="1.4" fill="none" marker-end="url(#ah)"/>
+<circle cx="193.5" cy="192" r="3" fill="#cfe3ff"/>
+<path d="M320 188 V130" stroke="#5aa0ff" stroke-opacity="0.7" stroke-width="1.4" fill="none" marker-end="url(#ah)" stroke-dasharray="3 3"/>
+<path d="M327 128 V186" stroke="#5aa0ff" stroke-opacity="0.7" stroke-width="1.4" fill="none" marker-end="url(#ah)"/>
+<circle cx="323.5" cy="192" r="3" fill="#cfe3ff"/>
+<path d="M450 188 V130" stroke="#5aa0ff" stroke-opacity="0.7" stroke-width="1.4" fill="none" marker-end="url(#ah)" stroke-dasharray="3 3"/>
+<path d="M457 128 V186" stroke="#5aa0ff" stroke-opacity="0.7" stroke-width="1.4" fill="none" marker-end="url(#ah)"/>
+<circle cx="453.5" cy="192" r="3" fill="#cfe3ff"/>
+<path d="M216 248 V130" stroke="#5aa0ff" stroke-opacity="0.7" stroke-width="1.4" fill="none" marker-end="url(#ah)" stroke-dasharray="3 3"/>
+<path d="M223 128 V246" stroke="#5aa0ff" stroke-opacity="0.7" stroke-width="1.4" fill="none" marker-end="url(#ah)"/>
+<circle cx="219.5" cy="252" r="3" fill="#cfe3ff"/>
+<path d="M346 248 V130" stroke="#5aa0ff" stroke-opacity="0.7" stroke-width="1.4" fill="none" marker-end="url(#ah)" stroke-dasharray="3 3"/>
+<path d="M353 128 V246" stroke="#5aa0ff" stroke-opacity="0.7" stroke-width="1.4" fill="none" marker-end="url(#ah)"/>
+<circle cx="349.5" cy="252" r="3" fill="#cfe3ff"/>
+<path d="M476 248 V130" stroke="#5aa0ff" stroke-opacity="0.7" stroke-width="1.4" fill="none" marker-end="url(#ah)" stroke-dasharray="3 3"/>
+<path d="M483 128 V246" stroke="#5aa0ff" stroke-opacity="0.7" stroke-width="1.4" fill="none" marker-end="url(#ah)"/>
+<circle cx="479.5" cy="252" r="3" fill="#cfe3ff"/>
+<path d="M242 308 V130" stroke="#5aa0ff" stroke-opacity="0.7" stroke-width="1.4" fill="none" marker-end="url(#ah)" stroke-dasharray="3 3"/>
+<path d="M249 128 V306" stroke="#5aa0ff" stroke-opacity="0.7" stroke-width="1.4" fill="none" marker-end="url(#ah)"/>
+<circle cx="245.5" cy="312" r="3" fill="#ffb020"/>
+<path d="M372 308 V130" stroke="#5aa0ff" stroke-opacity="0.7" stroke-width="1.4" fill="none" marker-end="url(#ah)" stroke-dasharray="3 3"/>
+<path d="M379 128 V306" stroke="#5aa0ff" stroke-opacity="0.7" stroke-width="1.4" fill="none" marker-end="url(#ah)"/>
+<circle cx="375.5" cy="312" r="3" fill="#ffb020"/>
+<path d="M502 308 V130" stroke="#5aa0ff" stroke-opacity="0.7" stroke-width="1.4" fill="none" marker-end="url(#ah)" stroke-dasharray="3 3"/>
+<path d="M509 128 V306" stroke="#5aa0ff" stroke-opacity="0.7" stroke-width="1.4" fill="none" marker-end="url(#ah)"/>
+<circle cx="505.5" cy="312" r="3" fill="#ffb020"/>
+<circle cx="560" cy="122" r="12" fill="#5aa0ff" fill-opacity="0.18" stroke="#5aa0ff"/><path d="M556 116 L566 122 L556 128 Z" fill="#5aa0ff"/>
+<text x="540" y="126" fill="#5aa0ff" font-size="12" font-weight="700" text-anchor="end">Play</text>
+<path d="M568 130 L600 190" stroke="#5aa0ff" stroke-width="1.6" fill="none" marker-end="url(#ah)"/>
+<path d="M568 130 L600 250" stroke="#5aa0ff" stroke-width="1.6" fill="none" marker-end="url(#ah)"/>
+<path d="M568 130 L600 310" stroke="#5aa0ff" stroke-width="1.6" fill="none" marker-end="url(#ah)"/>
+<text x="616" y="168" fill="#93a3bf" font-size="11">“start at T”</text>
+<path d="M576 104 H722" stroke="#7f8fae" stroke-dasharray="3 4"/><text x="658.0" y="100" fill="#cfe3ff" font-size="11" font-weight="700" text-anchor="middle">+ 1 s</text>
+<rect x="742.5" y="98" width="3" height="240" fill="url(#tline)" filter="url(#glow)"/>
+<rect x="726" y="86" width="36" height="20" rx="10" fill="#3dffa8"/><text x="744" y="100" fill="#06210f" font-size="12" font-weight="800" text-anchor="middle">T</text>
+<g><animate attributeName="opacity" values="0.12;0.12;1;1;0.12" keyTimes="0;0.762;0.772;0.97;1" dur="6.0s" repeatCount="indefinite"/>
+<rect x="750.0" y="177.7" width="8.5" height="14.3" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="761.5" y="170.1" width="8.5" height="21.9" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="773.0" y="174.5" width="8.5" height="17.5" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="784.5" y="187.5" width="8.5" height="4.5" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="796.0" y="174.3" width="8.5" height="17.7" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="807.5" y="170.2" width="8.5" height="21.8" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="819.0" y="177.9" width="8.5" height="14.1" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="830.5" y="183.0" width="8.5" height="9.0" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="842.0" y="171.8" width="8.5" height="20.2" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="853.5" y="171.4" width="8.5" height="20.6" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="865.0" y="182.0" width="8.5" height="10.0" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="876.5" y="178.8" width="8.5" height="13.2" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="888.0" y="170.3" width="8.5" height="21.7" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="899.5" y="173.6" width="8.5" height="18.4" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="911.0" y="186.4" width="8.5" height="5.6" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+</g>
+<g><animate attributeName="opacity" values="0.12;0.12;1;1;0.12" keyTimes="0;0.762;0.772;0.97;1" dur="6.0s" repeatCount="indefinite"/>
+<rect x="750.0" y="237.7" width="8.5" height="14.3" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="761.5" y="230.1" width="8.5" height="21.9" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="773.0" y="234.5" width="8.5" height="17.5" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="784.5" y="247.5" width="8.5" height="4.5" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="796.0" y="234.3" width="8.5" height="17.7" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="807.5" y="230.2" width="8.5" height="21.8" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="819.0" y="237.9" width="8.5" height="14.1" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="830.5" y="243.0" width="8.5" height="9.0" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="842.0" y="231.8" width="8.5" height="20.2" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="853.5" y="231.4" width="8.5" height="20.6" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="865.0" y="242.0" width="8.5" height="10.0" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="876.5" y="238.8" width="8.5" height="13.2" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="888.0" y="230.3" width="8.5" height="21.7" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="899.5" y="233.6" width="8.5" height="18.4" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+<rect x="911.0" y="246.4" width="8.5" height="5.6" rx="1.5" fill="#cfe3ff" filter="url(#glow)"/>
+</g>
+<g><animate attributeName="opacity" values="0.12;0.12;1;1;0.12" keyTimes="0;0.762;0.772;0.97;1" dur="6.0s" repeatCount="indefinite"/>
+<rect x="750.0" y="297.7" width="8.5" height="14.3" rx="1.5" fill="#ffb020" filter="url(#glow)"/>
+<rect x="761.5" y="290.1" width="8.5" height="21.9" rx="1.5" fill="#ffb020" filter="url(#glow)"/>
+<rect x="773.0" y="294.5" width="8.5" height="17.5" rx="1.5" fill="#ffb020" filter="url(#glow)"/>
+<rect x="784.5" y="307.5" width="8.5" height="4.5" rx="1.5" fill="#ffb020" filter="url(#glow)"/>
+<rect x="796.0" y="294.3" width="8.5" height="17.7" rx="1.5" fill="#ffb020" filter="url(#glow)"/>
+<rect x="807.5" y="290.2" width="8.5" height="21.8" rx="1.5" fill="#ffb020" filter="url(#glow)"/>
+<rect x="819.0" y="297.9" width="8.5" height="14.1" rx="1.5" fill="#ffb020" filter="url(#glow)"/>
+<rect x="830.5" y="303.0" width="8.5" height="9.0" rx="1.5" fill="#ffb020" filter="url(#glow)"/>
+<rect x="842.0" y="291.8" width="8.5" height="20.2" rx="1.5" fill="#ffb020" filter="url(#glow)"/>
+<rect x="853.5" y="291.4" width="8.5" height="20.6" rx="1.5" fill="#ffb020" filter="url(#glow)"/>
+<rect x="865.0" y="302.0" width="8.5" height="10.0" rx="1.5" fill="#ffb020" filter="url(#glow)"/>
+<rect x="876.5" y="298.8" width="8.5" height="13.2" rx="1.5" fill="#ffb020" filter="url(#glow)"/>
+<rect x="888.0" y="290.3" width="8.5" height="21.7" rx="1.5" fill="#ffb020" filter="url(#glow)"/>
+<rect x="899.5" y="293.6" width="8.5" height="18.4" rx="1.5" fill="#ffb020" filter="url(#glow)"/>
+<rect x="911.0" y="306.4" width="8.5" height="5.6" rx="1.5" fill="#ffb020" filter="url(#glow)"/>
+</g>
+<g><line x1="0" y1="96" x2="0" y2="340" stroke="#ffffff" stroke-opacity="0.35" stroke-width="1.2"/><circle cx="0" cy="96" r="4" fill="#ffffff"/><animateTransform attributeName="transform" type="translate" values="150 0;924 0" dur="6.0s" repeatCount="indefinite"/></g>
+</svg>

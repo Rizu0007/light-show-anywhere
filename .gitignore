@@ -11,3 +11,7 @@
 
 # Party server certificate (lsa-server --tls)
 /.lsa-tls/
+/media/
+
+# Demo video tools (Kokoro voice model, Python venv) and rendered media
+/.demo-tools/
