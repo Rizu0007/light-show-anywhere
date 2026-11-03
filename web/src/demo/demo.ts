@@ -3,8 +3,8 @@
  * Tesla show emulated in WebAssembly) and the real car picture, encoded to MP4 with Mediabunny.
  *
  * Development page: http://localhost:5173/demo.html?show=/@fs/<show.fseq>&song=/@fs/<song.wav>
- * plays the animation; `&t=12.5` shows one frame; "Render MP4" downloads the video.
- * scripts/make-demo.mjs renders it headless.
+ * plays the animation; `&t=12.5` shows one frame; `&format=square` makes the 1080 × 1080 version
+ * for social feeds; "Render MP4" downloads the video. scripts/make-demo.mjs renders both headless.
  */
 
 import { BODY, CHANNEL_COLORS, COLORS, LIGHT_SPOTS } from "../car/layout";
@@ -23,9 +23,24 @@ const ACCENT = "#5aa0ff";
 const PANEL = "#0d121a";
 const LINE = "#1d2430";
 
-/** Video time (s) at which the show and its song start, and how long they play. */
-const SONG_AT = 28;
-const SONG_END = 72.5;
+/** Where the project lives, shown at the end (and throughout the square version). */
+const REPO_URL = "github.com/Rizu0007/light-show-anywhere";
+const AUTHOR = "Rizwan";
+
+/**
+ * Stretches of the show (and its song) the video plays: [video time (s), show time (s), length].
+ * The opening plays a lively part of the show over the crowd; the rest plays it from the start.
+ */
+const CLIPS: [number, number, number][] = [
+  [0, 33, 4.5],
+  [26, 0, 35.5],
+];
+
+/** 16:9 for the README and YouTube; square for LinkedIn and other feeds (the same scenes, with a
+ *  header and bigger subtitles). */
+const FORMAT: "wide" | "square" = new URLSearchParams(location.search).get("format") === "square" ? "square" : "wide";
+/** Size of the encoded video. Scenes are always drawn at W × H. */
+export const OUT = FORMAT === "square" ? { w: 1080, h: 1080 } : { w: W, h: H };
 
 type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 
@@ -306,10 +321,11 @@ function govern(levels: number[], step: number): number[] {
 
 let show: Show | null = null;
 const empty = new Uint8Array(48);
-/** Channel levels the show gives at video time `t`. */
+/** Channel levels the show gives at video time `t` (dark outside the clips). */
 function levels(t: number): Uint8Array {
-  if (!show || t < SONG_AT) return empty;
-  return show.levelsAt((t - SONG_AT) * 1000) ?? empty;
+  const clip = CLIPS.find(([at, , length]) => t >= at && t < at + length);
+  if (!show || !clip) return empty;
+  return show.levelsAt((clip[1] + t - clip[0]) * 1000) ?? empty;
 }
 const levelOf = (lv: Uint8Array, channel: number) => lv[channel - 1] ?? 0;
 const colorOf = (channel: number) => CHANNEL_COLORS.get(channel) ?? COLORS.white;
@@ -356,21 +372,21 @@ const CAR_CROWD = mapLights(grid(12, 6), "front", 1, false);
 /** What the narrator says: [start (s), room before the next line (s), words]. Shown as subtitles;
  *  scripts/make-demo.mjs speaks it. */
 export const NARRATION: [number, number, string][] = [
-  [0.5, 3.4, "This is Light Show Anywhere, where every phone becomes one light."],
-  [4.2, 3.7, "No Tesla? No problem. A crowd of phones becomes the car."],
-  [8.3, 4.1, "Here's how it works. Open the app, and drop in a Tesla light show with its song."],
-  [12.6, 3.8, "Right away, you see the car play the show. Lights, doors, and all."],
-  [16.6, 3.8, "Press Start party, and you get a room code and a QR code."],
-  [20.6, 4.3, "Friends scan it, and tap Join. Each phone is handed its own light."],
-  [25.1, 2.8, "Then, hit Play."],
-  [28.6, 7.2, "Behind the scenes, a Rust engine plays the show exactly like a real Tesla. Every lamp, and every fade."],
-  [36.4, 6.4, "Fast strobes are softened before they reach anyone's phone, so the show is safe to watch."],
-  [43.4, 6.4, "The server deals out the lights, headlights first, and sends each phone only its own part."],
-  [49.9, 7.0, "So when everyone stands together and raises their phone, the crowd becomes the car. Flashlights and all."],
-  [57.3, 3.6, "Every phone follows the server's clock, so they all flash together."],
-  [61.3, 7.4, "From above, you can see it. A car, drawn by people, playing in time with the music."],
-  [69.6, 12.0, "It even measures your speaker's delay, drives LED strips, exports the show as a video, and keeps playing when the Wi-Fi drops."],
-  [84.4, 7.0, "Light Show Anywhere. Built with Rust, WebAssembly, and React. Every phone is one light."],
+  [0.4, 3.9, "This is Light Show Anywhere, where every phone becomes one light."],
+  [4.6, 3.3, "No Tesla? A crowd of phones becomes the car."],
+  [8.2, 4.0, "Open the app, and drop in a Tesla light show with its song."],
+  [12.5, 3.2, "Right away, the car plays it. Lights, doors, and all."],
+  [15.9, 3.3, "Press Start party to get a room code and a QR code."],
+  [19.4, 3.8, "Friends scan it and tap Join. Each phone gets its own light."],
+  [23.4, 2.4, "Then, hit Play."],
+  [26.2, 3.6, "A Rust engine plays the show exactly like a real Tesla."],
+  [30.2, 3.6, "Fast strobes are softened, so it's safe to watch."],
+  [34.2, 5.0, "The server deals out the lights, headlights first, and sends each phone only its part."],
+  [39.6, 6.1, "When everyone raises their phone, the crowd becomes the car. Flashlights and all."],
+  [46.0, 3.4, "Every phone follows the server's clock, so they flash together."],
+  [49.6, 5.6, "From above, you see it: a car, drawn by people, in time with the music."],
+  [55.6, 5.7, "It measures your speaker's delay, drives LED strips, exports video, and survives Wi-Fi drops."],
+  [61.6, 6.0, "Light Show Anywhere. Open source, built with Rust, WebAssembly, and React."],
 ];
 
 // ------------------------------------------------------------------------------------ walkthrough
@@ -384,7 +400,7 @@ type Crop = [number, number, number, number];
 const lerpCrop = (a: Crop, b: Crop, k: number): Crop => a.map((v, i) => v + (b[i] - v) * k) as Crop;
 
 /** A browser window showing `crop` of a screenshot; returns a mapper from screenshot to screen. */
-function browserWindow(ctx: Ctx, name: string, x: number, y: number, w: number, crop: Crop, alpha = 1, url = "localhost:5173") {
+function browserWindow(ctx: Ctx, name: string, x: number, y: number, w: number, crop: Crop, alpha = 1, url = "Light Show Anywhere") {
   const bar = 34;
   const h = bar + (w * crop[3]) / crop[2];
   ctx.save();
@@ -514,12 +530,14 @@ const STEPS = [
   "Step 4 · Friends scan and join",
   "Step 5 · Press Play",
 ];
-const STEP_AT = [0, 4.5, 8.5, 12.5, 17];
+const STEP_AT = [0, 4.3, 7.8, 11.3, 15.3];
+/** Length of the walkthrough scene. */
+const WALK_LEN = 18;
 
 function walkthrough(ctx: Ctx, l: number) {
   const step = STEP_AT.filter((at) => l >= at).length - 1;
   const sl = l - STEP_AT[step];
-  const stepEnd = (STEP_AT[step + 1] ?? 20) - STEP_AT[step];
+  const stepEnd = (STEP_AT[step + 1] ?? WALK_LEN) - STEP_AT[step];
   const a = Math.min(ramp(sl, 0, 0.4), clamp((stepEnd - sl) / 0.35));
   text(ctx, "HOW TO USE IT", 70, 58, { size: 17, weight: 700, color: ACCENT });
   text(ctx, STEPS[step], 70, 98, { size: 36, weight: 700, alpha: ramp(sl, 0, 0.4) });
@@ -560,22 +578,26 @@ function walkthrough(ctx: Ctx, l: number) {
     const joined = ramp(sl, 2.3, 0.35);
     const ph = phoneShot(ctx, "phone-join", 300, 400, 500, a * (1 - joined));
     phoneShot(ctx, "phone-joined", 300, 400, 500, a * joined);
+    // A joined phone stays dark until Play; say so, or it looks switched off.
+    chip(ctx, "Ready: waiting for Play", 196, 330, a * ramp(sl, 2.6, 0.4), ACCENT, 17);
     const btn = ph(195, 627);
     pointer(ctx, btn.x + 40 * (1 - ease(sl / 1.8)), btn.y + 60 * (1 - ease(sl / 1.8)), a * (1 - ramp(sl, 2.6, 0.3)));
     ripple(ctx, btn.x, btn.y, (sl - 1.9) / 0.6);
     // The host's list fills in as phones join.
     const rows = Math.floor(ramp(sl, 2.4, 1.6) * 6);
     const crop: Crop = [740, 270, 470, 290];
-    const map = browserWindow(ctx, "host-roster", 560, 195, 640, crop, a * ramp(sl, 0.4));
+    const roster = a * ramp(sl, 0.4);
+    const map = browserWindow(ctx, "host-roster", 560, 195, 640, crop, roster);
     const top = map(0, 313).y;
     const bottom = map(0, 313 + 34 * 6).y;
     ctx.save();
-    ctx.globalAlpha = a;
+    // Hides phones that have not joined yet; fades in with the window, or it shows as an empty box.
+    ctx.globalAlpha = roster;
     ctx.fillStyle = "#0b0f15";
     const coverFrom = top + ((bottom - top) * rows) / 6;
     ctx.fillRect(map(740, 0).x, coverFrom, 640, Math.max(0, bottom - coverFrom + 6));
     ctx.restore();
-    text(ctx, "The host sees every phone and its light", 880, 170, { size: 20, color: MUTED, align: "center", alpha: a * ramp(sl, 1) });
+    text(ctx, "The host sees every phone and its light", 880, 170, { size: 20, color: MUTED, align: "center", alpha: roster * ramp(sl, 1) });
   } else {
     const lit = ramp(sl, 1.3, 0.25);
     const map = browserWindow(ctx, "host-playing", 120, 160, 700, [0, 0, 1280, 800], a);
@@ -873,32 +895,26 @@ function nightCrowd(ctx: Ctx, cam: Camera, t: number, l: number, raised: boolean
 
 const scenes: Scene[] = [
   {
+    // The hook: the best picture first, since feeds play videos muted and people decide fast.
     start: 0,
-    end: 4,
-    draw(ctx, l) {
-      const r = random(3);
-      for (let i = 0; i < 70; i++) {
-        const x = r() * W;
-        const y = r() * H;
-        const tw = Math.max(0, Math.sin(l * 2 + i)) ** 4;
-        ctx.fillStyle = rgba(i % 5 === 0 ? COLORS.amber : COLORS.white, 0.12 + 0.5 * tw * ramp(l, 0.2, 1));
-        ctx.beginPath();
-        ctx.arc(x, y, 2 + 2 * tw, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      const a = ramp(l, 0.2, 0.9);
-      ctx.save();
-      ctx.globalAlpha = a;
-      logo(ctx, W / 2, 250, 46, 0.8 + 0.6 * Math.sin(l * 3));
-      ctx.restore();
-      text(ctx, "Light Show Anywhere", W / 2, 360 + 20 * (1 - a), { size: 72, weight: 700, align: "center", alpha: a });
-      const b = ramp(l, 1.2);
-      text(ctx, "Human Tesla: every phone is one light", W / 2, 440, { size: 32, color: ACCENT, align: "center", alpha: b });
-      text(ctx, "Play real Tesla light shows on a crowd of phones", W / 2, 495, { size: 24, color: MUTED, align: "center", alpha: ramp(l, 1.9) });
+    end: 4.5,
+    draw(ctx, l, t) {
+      const k = ease(l / 4.5);
+      nightCrowd(ctx, { x: 0, h: 20 + 4 * k, z: 10.5 + 2 * k, pitch: 1.15 + 0.1 * k, f: 880 }, t, l, true);
+      const shade = ctx.createLinearGradient(0, 0, 0, 260);
+      shade.addColorStop(0, "rgba(5,7,10,0.85)");
+      shade.addColorStop(1, "rgba(5,7,10,0)");
+      ctx.fillStyle = shade;
+      ctx.fillRect(0, 0, W, 260);
+      // The square version's header already names the project.
+      if (FORMAT === "square") return;
+      const a = ramp(l, 0.6, 0.7);
+      text(ctx, "Light Show Anywhere", W / 2, 92 + 14 * (1 - a), { size: 64, weight: 700, align: "center", alpha: a });
+      text(ctx, "No Tesla needed: a crowd of phones plays the light show", W / 2, 158, { size: 28, color: ACCENT, align: "center", alpha: ramp(l, 1.3, 0.6) });
     },
   },
   {
-    start: 4,
+    start: 4.5,
     end: 8,
     step: "The idea",
     heading: "A light show needs a Tesla. What if the crowd is the car?",
@@ -930,45 +946,45 @@ const scenes: Scene[] = [
       ctx.restore();
       text(ctx, "one Tesla, one show", 320, 530, { size: 24, weight: 600, align: "center", alpha: a });
 
-      const b = ramp(l, 1.2);
+      const b = ramp(l, 0.8);
       arrow(ctx, 600, 370, 680, 370, b, ACCENT);
       panel(ctx, 710, 160, 500, 420, b, rgba(ACCENT, 0.5));
       text(ctx, "Light Show Anywhere", 960, 205, { size: 22, color: ACCENT, align: "center", alpha: b });
-      crowd(ctx, CAR_CROWD, (ch) => idle(t, ch), 750, 250, 420, 230, 20, ramp(l, 1.4, 2));
+      crowd(ctx, CAR_CROWD, (ch) => idle(t, ch), 750, 250, 420, 230, 20, ramp(l, 1.0, 1.5));
       text(ctx, "a crowd of phones, no car needed", 960, 530, { size: 24, weight: 600, align: "center", alpha: b });
     },
   },
   {
-    start: SONG_AT,
-    end: 36,
+    start: 26,
+    end: 30,
     step: "1 · The engine",
     heading: "The show is emulated like a real Tesla",
     draw(ctx, l, t) {
       const boxes = [".fseq show", "Rust parser", "Tesla emulator", "WebAssembly", "Live preview"];
       boxes.forEach((s, i) => {
-        const a = ramp(l, 0.2 + i * 0.35, 0.5);
+        const a = ramp(l, 0.1 + i * 0.18, 0.4);
         const x = 70 + i * 232;
         panel(ctx, x, 150, 190, 64, a, i === 2 ? rgba(ACCENT, 0.7) : LINE);
         text(ctx, s, x + 95, 182, { size: 21, weight: 600, align: "center", alpha: a, color: i === 2 ? ACCENT : TEXT });
         if (i > 0) arrow(ctx, x - 40, 182, x - 6, 182, a);
       });
       const pulse = (l * 0.6) % 1;
-      ctx.fillStyle = rgba(ACCENT, ramp(l, 2));
+      ctx.fillStyle = rgba(ACCENT, ramp(l, 1.1));
       ctx.beginPath();
       ctx.arc(70 + pulse * (232 * 4 + 190), 222, 4, 0, Math.PI * 2);
       ctx.fill();
 
-      car(ctx, t, 210, 226, 860, ramp(l, 1.6, 0.8));
+      car(ctx, t, 210, 226, 860, ramp(l, 0.9, 0.6));
       const facts = ["byte 178 = on over 500 ms", "byte 255 = on instantly", "doors & mirrors move", "4 models + Cybertruck"];
       let x = 110;
       facts.forEach((f, i) => {
-        x += chip(ctx, f, x, 612, ramp(l, 3 + i * 0.8), i % 2 ? COLORS.amber : ACCENT, 17) + 14;
+        x += chip(ctx, f, x, 612, ramp(l, 1.6 + i * 0.35, 0.4), i % 2 ? COLORS.amber : ACCENT, 17) + 14;
       });
     },
   },
   {
-    start: 43,
-    end: 49.5,
+    start: 34,
+    end: 39.5,
     step: "3 · The party",
     heading: "Scan the QR code. Your phone becomes one light.",
     draw(ctx, l, t) {
@@ -981,25 +997,26 @@ const scenes: Scene[] = [
       qr(ctx, 125, 215, 200);
       ctx.restore();
       text(ctx, "Room", 135, 470, { size: 22, color: MUTED, alpha: a });
-      text(ctx, "K T X R", 205, 470, { size: 30, weight: 700, color: ACCENT, alpha: a, font: "ui-monospace, monospace" });
-      const joined = Math.min(CAR_CROWD.length, Math.floor(ramp(l, 1, 4.5) * CAR_CROWD.length));
+      // The room code in the walkthrough's screenshots.
+      text(ctx, "W B Q U", 205, 470, { size: 30, weight: 700, color: ACCENT, alpha: a, font: "ui-monospace, monospace" });
+      const joined = Math.min(CAR_CROWD.length, Math.floor(ramp(l, 0.6, 3) * CAR_CROWD.length));
       text(ctx, `Phones (${joined})`, 135, 525, { size: 24, weight: 600, alpha: a });
-      text(ctx, "Left Outer Main Beam · Right Outer…", 135, 565, { size: 17, color: MUTED, alpha: ramp(l, 2) });
+      text(ctx, "Left Outer Main Beam · Right Outer…", 135, 565, { size: 17, color: MUTED, alpha: ramp(l, 1.4) });
 
       panel(ctx, 420, 150, 800, 470, a);
       text(ctx, "The crowd, from the front", 820, 185, { size: 20, color: MUTED, align: "center", alpha: a });
-      crowd(ctx, CAR_CROWD, (ch) => levelOf(lv, ch), 450, 225, 740, 330, 30, ramp(l, 1, 4.5));
-      if (l > 6) {
+      crowd(ctx, CAR_CROWD, (ch) => levelOf(lv, ch), 450, 225, 740, 330, 30, ramp(l, 0.6, 3));
+      if (l > 3.4) {
         let x = 450;
         ["each phone: one light", "white · amber · red", "+ flashlight on Android & iPhone"].forEach((s, i) => {
-          x += chip(ctx, s, x, 592, ramp(l, 6 + i * 0.7), i === 1 ? COLORS.amber : ACCENT, 16) + 12;
+          x += chip(ctx, s, x, 592, ramp(l, 3.4 + i * 0.4, 0.4), i === 1 ? COLORS.amber : ACCENT, 16) + 12;
         });
       }
     },
   },
   {
-    start: 57,
-    end: 61,
+    start: 46,
+    end: 49.5,
     step: "5 · In sync",
     heading: "Different phones, one clock, every flash together",
     draw(ctx, l, t) {
@@ -1032,7 +1049,7 @@ const scenes: Scene[] = [
         ctx.lineTo(640, 200);
         ctx.stroke();
         ctx.setLineDash([]);
-        ctx.fillStyle = rgba(up ? ACCENT : COLORS.amber, b * (l < 3.5 ? 1 : 0.35));
+        ctx.fillStyle = rgba(up ? ACCENT : COLORS.amber, b * (l < 2.5 ? 1 : 0.35));
         ctx.beginPath();
         ctx.arc(d.x + (640 - d.x) * q, 300 + (200 - 300) * q, 5, 0, Math.PI * 2);
         ctx.fill();
@@ -1043,15 +1060,15 @@ const scenes: Scene[] = [
         size: 22,
         weight: 600,
         align: "center",
-        alpha: ramp(l, 1),
+        alpha: ramp(l, 0.8),
         font: "ui-monospace, monospace",
       });
-      chip(ctx, "measured: phones within 17 ms of each other", 420, 628, ramp(l, 2.5), COLORS.amber, 18);
+      chip(ctx, "measured: phones within 17 ms of each other", 420, 628, ramp(l, 1.5), COLORS.amber, 18);
     },
   },
   {
-    start: 36,
-    end: 43,
+    start: 30,
+    end: 34,
     step: "2 · Safe to watch",
     heading: "No fast strobing on anyone's phone",
     draw(ctx, l) {
@@ -1059,7 +1076,7 @@ const scenes: Scene[] = [
       const raw: number[] = [];
       for (let f = 0; f < 200; f++) raw.push(f < 110 ? (Math.floor(f / 2) % 2 ? 255 : 0) : Math.floor(f / 25) % 2 ? 255 : 0);
       const safe = govern(raw, step);
-      const show = Math.min(raw.length, Math.floor(ramp(l, 0.3, 4.5) * raw.length));
+      const show = Math.min(raw.length, Math.floor(ramp(l, 0.2, 2.8) * raw.length));
       const lane = (y: number, data: number[], color: string, label: string, alpha: number) => {
         panel(ctx, 80, y, 1120, 170, alpha);
         text(ctx, label, 110, y + 30, { size: 21, weight: 600, color, alpha });
@@ -1078,16 +1095,16 @@ const scenes: Scene[] = [
         ctx.restore();
       };
       lane(150, raw, COLORS.red, "What the show asks for: a 12 Hz strobe", ramp(l, 0.1));
-      lane(350, safe, ACCENT, "What phones play: slower, full pulses", ramp(l, 0.5));
+      lane(350, safe, ACCENT, "What phones play: slower, full pulses", ramp(l, 0.3));
       let x = 110;
       ["≤ 3 flashes / second", "≥ 150 ms fades", "applied to every phone and LED strip"].forEach((s, i) => {
-        x += chip(ctx, s, x, 575, ramp(l, 2.5 + i * 0.6), i === 2 ? COLORS.amber : ACCENT, 18) + 14;
+        x += chip(ctx, s, x, 575, ramp(l, 1.6 + i * 0.4, 0.4), i === 2 ? COLORS.amber : ACCENT, 18) + 14;
       });
     },
   },
   {
-    start: 69,
-    end: 84,
+    start: 55.5,
+    end: 61.5,
     step: "7 · Made for real parties",
     heading: "Small things that make it work in a real room",
     draw(ctx, l, t) {
@@ -1170,7 +1187,7 @@ const scenes: Scene[] = [
       cards.forEach(([title, sub, draw], i) => {
         const x = 70 + (i % 2) * 580;
         const y = 150 + Math.floor(i / 2) * 240;
-        const a = ramp(l, 0.2 + i * 0.6);
+        const a = ramp(l, 0.15 + i * 0.3, 0.5);
         panel(ctx, x, y + (1 - a) * 20, 560, 220, a);
         text(ctx, title, x + 30, y + 40, { size: 26, weight: 700, alpha: a });
         text(ctx, sub, x + 30, y + 80, { size: 18, color: MUTED, alpha: a });
@@ -1179,11 +1196,11 @@ const scenes: Scene[] = [
     },
   },
   {
-    start: 84,
-    end: 92,
+    start: 61.5,
+    end: 68,
     draw(ctx, l, t) {
       const a = ramp(l, 0.1);
-      text(ctx, "How it's built", W / 2, 120, { size: 22, color: MUTED, align: "center", alpha: a });
+      text(ctx, "How it's built", W / 2, 110, { size: 22, color: MUTED, align: "center", alpha: a });
       const stack: [string, string][] = [
         ["Rust", "FSEQ parser · Tesla emulator · party server"],
         ["WebAssembly", "the same engine in the browser"],
@@ -1191,42 +1208,46 @@ const scenes: Scene[] = [
         ["WebSocket + clock sync", "one start time for every phone"],
       ];
       stack.forEach(([name, what], i) => {
-        const b = ramp(l, 0.3 + i * 0.35);
-        const y = 180 + i * 62;
-        text(ctx, name, 600, y, { size: 28, weight: 700, align: "right", alpha: b, color: i % 2 ? COLORS.amber : ACCENT });
-        text(ctx, what, 630, y, { size: 24, alpha: b });
+        const b = ramp(l, 0.2 + i * 0.2, 0.4);
+        const y = 160 + i * 50;
+        text(ctx, name, 600, y, { size: 26, weight: 700, align: "right", alpha: b, color: i % 2 ? COLORS.amber : ACCENT });
+        text(ctx, what, 630, y, { size: 22, alpha: b });
       });
-      const c = ramp(l, 3.2, 0.9);
+      const c = ramp(l, 1.3, 0.7);
       ctx.save();
       ctx.globalAlpha = c;
-      logo(ctx, W / 2, 490, 30, 1 + 0.6 * Math.sin(t * 3));
+      logo(ctx, W / 2, 395, 28, 1 + 0.6 * Math.sin(t * 3));
       ctx.restore();
-      text(ctx, "Light Show Anywhere", W / 2, 560, { size: 56, weight: 700, align: "center", alpha: c });
-      text(ctx, "Every phone is one light.", W / 2, 615, { size: 26, color: ACCENT, align: "center", alpha: ramp(l, 3.8) });
+      text(ctx, "Light Show Anywhere", W / 2, 455, { size: 54, weight: 700, align: "center", alpha: c });
+      text(ctx, "Every phone is one light.", W / 2, 505, { size: 26, color: ACCENT, align: "center", alpha: ramp(l, 1.8) });
+      const d = ramp(l, 2.3, 0.6);
+      ctx.font = "600 22px system-ui, sans-serif";
+      chip(ctx, REPO_URL, W / 2 - (ctx.measureText(REPO_URL).width + 28) / 2, 565, d, ACCENT, 22);
+      text(ctx, `Made by ${AUTHOR}`, W / 2, 618, { size: 24, weight: 600, color: TEXT, align: "center", alpha: ramp(l, 2.7, 0.6) });
     },
   },
   {
     start: 8,
-    end: SONG_AT,
+    end: 8 + WALK_LEN,
     draw(ctx, l) {
       walkthrough(ctx, l);
     },
   },
   {
-    start: 49.5,
-    end: 57,
+    start: 39.5,
+    end: 46,
     draw(ctx, l, t) {
-      const k = ease(l / 7.5);
+      const k = ease(l / 6.5);
       nightCrowd(ctx, { x: -1.5 + 3 * k, h: 3.4 + 1.4 * k, z: 1.5 + 3.5 * k, pitch: 0.15 + 0.08 * k, f: 820 }, t, l, false);
       text(ctx, "4 · TOGETHER", 70, 58, { size: 17, weight: 700, color: ACCENT, alpha: ramp(l, 0.2) });
       text(ctx, "Phones up. Flashlights on.", 70, 98, { size: 36, weight: 700, alpha: ramp(l, 0.2) });
     },
   },
   {
-    start: 61,
-    end: 69,
+    start: 49.5,
+    end: 55.5,
     draw(ctx, l, t) {
-      const k = ease(l / 8);
+      const k = ease(l / 6);
       nightCrowd(ctx, { x: 0, h: 4.5 + 19.5 * k, z: 4 + 8.5 * k, pitch: 0.24 + 1.01 * k, f: 880 }, t, l, true);
       text(ctx, "6 · FROM ABOVE", 70, 58, { size: 17, weight: 700, color: ACCENT, alpha: ramp(l, 0.2) });
       text(ctx, "A car, drawn by people", 70, 98, { size: 36, weight: 700, alpha: ramp(l, 0.2) });
@@ -1237,13 +1258,14 @@ const scenes: Scene[] = [
 scenes.sort((a, b) => a.start - b.start);
 export const DURATION = scenes[scenes.length - 1].end;
 
-/** Draws the whole video at time `t` seconds. */
-export function drawDemo(ctx: Ctx, t: number) {
+/** Draws the scenes at time `t` seconds, at W × H, without subtitles. */
+function drawScene(ctx: Ctx, t: number) {
   ctx.fillStyle = BG;
   ctx.fillRect(0, 0, W, H);
   const scene = scenes.find((s) => t >= s.start && t < s.end) ?? scenes[scenes.length - 1];
   const local = t - scene.start;
-  const fadeIn = clamp(local / 0.45);
+  // The opening is the hook: on screen from the very first frame.
+  const fadeIn = scene === scenes[0] ? 1 : clamp(local / 0.45);
   const fadeOut = scene === scenes[scenes.length - 1] ? clamp((DURATION - t) / 1.2) : clamp((scene.end - t) / 0.45);
   ctx.save();
   ctx.globalAlpha = Math.min(fadeIn, fadeOut);
@@ -1253,26 +1275,79 @@ export function drawDemo(ctx: Ctx, t: number) {
   }
   scene.draw(ctx, local, t);
   ctx.restore();
-  // Subtitles: what the narrator is saying.
-  const line = NARRATION.find(([at, room]) => t >= at && t < at + room);
-  if (line) {
-    const [at, room, words] = line;
-    const a = clamp((t - at) / 0.25) * clamp((at + room - t) / 0.25);
-    ctx.save();
-    ctx.globalAlpha = a;
-    ctx.font = "500 22px system-ui, sans-serif";
-    const w = Math.min(W - 80, ctx.measureText(words).width + 40);
-    roundRect(ctx, W / 2 - w / 2, H - 62, w, 40, 10);
-    ctx.fillStyle = "rgba(5,7,10,0.78)";
-    ctx.fill();
-    ctx.restore();
-    text(ctx, words, W / 2, H - 42, { size: 22, weight: 500, align: "center", alpha: a });
+}
+
+/** `words` in at most two lines no wider than `max` (split at the space nearest the middle). */
+function wrap(ctx: Ctx, words: string, max: number): string[] {
+  if (ctx.measureText(words).width <= max) return [words];
+  const middle = words.length / 2;
+  let split = -1;
+  for (let i = 0; i < words.length; i++) {
+    if (words[i] === " " && (split < 0 || Math.abs(i - middle) < Math.abs(split - middle))) split = i;
   }
-  // Progress line along the bottom edge.
+  return split < 0 ? [words] : [words.slice(0, split), words.slice(split + 1)];
+}
+
+/** What the narrator is saying at `t`, in a dark box whose last line is centred on `bottomY`. */
+function subtitle(ctx: Ctx, t: number, centreX: number, bottomY: number, maxWidth: number, size: number) {
+  const line = NARRATION.find(([at, room]) => t >= at && t < at + room);
+  if (!line) return;
+  const [at, room, words] = line;
+  const a = clamp((t - at) / 0.25) * clamp((at + room - t) / 0.25);
+  ctx.save();
+  ctx.font = `500 ${size}px system-ui, sans-serif`;
+  const lines = wrap(ctx, words, maxWidth - 40);
+  const lineHeight = size * 1.35;
+  const w = Math.min(maxWidth, Math.max(...lines.map((l) => ctx.measureText(l).width)) + 40);
+  const top = bottomY - (lines.length - 1) * lineHeight - size;
+  ctx.globalAlpha = a;
+  roundRect(ctx, centreX - w / 2, top, w, (lines.length - 1) * lineHeight + 2 * size, 10);
+  ctx.fillStyle = "rgba(5,7,10,0.78)";
+  ctx.fill();
+  ctx.restore();
+  lines.forEach((l, i) => {
+    text(ctx, l, centreX, bottomY - (lines.length - 1 - i) * lineHeight, { size, weight: 500, align: "center", alpha: a });
+  });
+}
+
+function progress(ctx: Ctx, t: number) {
   ctx.fillStyle = LINE;
-  ctx.fillRect(0, H - 3, W, 3);
+  ctx.fillRect(0, OUT.h - 3, OUT.w, 3);
   ctx.fillStyle = ACCENT;
-  ctx.fillRect(0, H - 3, (W * t) / DURATION, 3);
+  ctx.fillRect(0, OUT.h - 3, (OUT.w * t) / DURATION, 3);
+}
+
+/** The square version: the scene in the middle, the project above and subtitles below. */
+const SQUARE = { sceneY: 216, sceneH: (1080 * H) / W };
+const sceneCanvas = new OffscreenCanvas(W, H);
+const sceneCtx = sceneCanvas.getContext("2d")!;
+
+/** Draws the whole video at time `t` seconds, at OUT size. */
+export function drawDemo(ctx: Ctx, t: number) {
+  if (FORMAT === "wide") {
+    drawScene(ctx, t);
+    subtitle(ctx, t, W / 2, H - 42, W - 160, 22);
+    progress(ctx, t);
+    return;
+  }
+  drawScene(sceneCtx, t);
+  ctx.fillStyle = BG;
+  ctx.fillRect(0, 0, OUT.w, OUT.h);
+  // The end card names the project and its link itself.
+  const branding = 1 - ramp(t, scenes[scenes.length - 1].start, 0.5);
+  ctx.save();
+  ctx.globalAlpha = branding;
+  logo(ctx, OUT.w / 2, 48, 20, 1);
+  ctx.restore();
+  text(ctx, "Light Show Anywhere", OUT.w / 2, 112, { size: 50, weight: 700, align: "center", alpha: branding });
+  text(ctx, "Every phone becomes one light of a Tesla light show", OUT.w / 2, 170, { size: 28, color: ACCENT, align: "center", alpha: branding });
+  ctx.drawImage(sceneCanvas, 0, SQUARE.sceneY, OUT.w, SQUARE.sceneH);
+  ctx.fillStyle = LINE;
+  ctx.fillRect(0, SQUARE.sceneY - 1, OUT.w, 1);
+  ctx.fillRect(0, SQUARE.sceneY + SQUARE.sceneH, OUT.w, 1);
+  subtitle(ctx, t, OUT.w / 2, 940, OUT.w - 60, 34);
+  text(ctx, REPO_URL, OUT.w / 2, 1036, { size: 24, color: MUTED, align: "center", font: "ui-monospace, monospace", alpha: branding });
+  progress(ctx, t);
 }
 
 // ------------------------------------------------------------------------------------ audio
@@ -1286,13 +1361,19 @@ async function soundtrack(song: ArrayBuffer | null): Promise<AudioBuffer> {
 
   const pad = ctx.createGain();
   pad.connect(master);
-  pad.gain.setValueAtTime(0, 0);
-  pad.gain.linearRampToValueAtTime(0.16, 2);
-  pad.gain.setValueAtTime(0.16, SONG_AT - 1.5);
-  pad.gain.linearRampToValueAtTime(0.03, SONG_AT);
-  pad.gain.setValueAtTime(0.03, SONG_END - 1);
-  pad.gain.linearRampToValueAtTime(0.16, SONG_END + 0.5);
-  pad.gain.setValueAtTime(0.16, DURATION - 2.5);
+  // Quiet under the song, fuller between its clips.
+  const LOUD = 0.16;
+  const QUIET = 0.03;
+  pad.gain.setValueAtTime(CLIPS[0][0] === 0 ? QUIET : 0, 0);
+  for (const [at, , length] of CLIPS) {
+    if (at > 0) {
+      pad.gain.setValueAtTime(LOUD, Math.max(0, at - 1.5));
+      pad.gain.linearRampToValueAtTime(QUIET, at);
+    }
+    pad.gain.setValueAtTime(QUIET, at + length - 0.8);
+    pad.gain.linearRampToValueAtTime(LOUD, at + length + 0.5);
+  }
+  pad.gain.setValueAtTime(LOUD, DURATION - 2.5);
   pad.gain.linearRampToValueAtTime(0, DURATION);
   const filter = ctx.createBiquadFilter();
   filter.type = "lowpass";
@@ -1326,15 +1407,18 @@ async function soundtrack(song: ArrayBuffer | null): Promise<AudioBuffer> {
 
   if (song) {
     const buffer = await ctx.decodeAudioData(song);
-    const source = ctx.createBufferSource();
-    source.buffer = buffer;
-    const g = ctx.createGain();
-    g.gain.setValueAtTime(0, SONG_AT);
-    g.gain.linearRampToValueAtTime(0.9, SONG_AT + 0.4);
-    g.gain.setValueAtTime(0.9, SONG_END - 1.2);
-    g.gain.linearRampToValueAtTime(0, SONG_END);
-    source.connect(g).connect(master);
-    source.start(SONG_AT, 0, SONG_END - SONG_AT);
+    // The song under each clip, in step with the lights.
+    for (const [at, from, length] of CLIPS) {
+      const source = ctx.createBufferSource();
+      source.buffer = buffer;
+      const g = ctx.createGain();
+      g.gain.setValueAtTime(0, at);
+      g.gain.linearRampToValueAtTime(0.9, at + (at === 0 ? 0.05 : 0.4));
+      g.gain.setValueAtTime(0.9, at + length - 1);
+      g.gain.linearRampToValueAtTime(0, at + length);
+      source.connect(g).connect(master);
+      source.start(at, from, length);
+    }
   }
   return ctx.startRendering();
 }
@@ -1350,13 +1434,13 @@ interface Rendered {
 
 async function renderVideo(song: ArrayBuffer | null, onProgress: (f: number) => void): Promise<Rendered> {
   const mb = await import("mediabunny");
-  const codec = await mb.getFirstEncodableVideoCodec(["avc", "vp9"], { width: W, height: H });
+  const codec = await mb.getFirstEncodableVideoCodec(["avc", "vp9"], { width: OUT.w, height: OUT.h });
   if (!codec) throw new Error("this browser cannot encode video");
   const mp4 = codec === "avc";
   // H.264 goes in MP4; a browser without it gets VP9 in WebM.
   const format = mp4 ? new mb.Mp4OutputFormat({ fastStart: "in-memory" }) : new mb.WebMOutputFormat();
   const output = new mb.Output({ format, target: new mb.BufferTarget() });
-  const canvas = new OffscreenCanvas(W, H);
+  const canvas = new OffscreenCanvas(OUT.w, OUT.h);
   const ctx = canvas.getContext("2d")!;
   const video = new mb.CanvasSource(canvas, { codec, quality: mb.QUALITY_HIGH, keyFrameInterval: 2 });
   output.addVideoTrack(video, { frameRate: FPS });
@@ -1389,6 +1473,10 @@ async function renderVideo(song: ArrayBuffer | null, onProgress: (f: number) => 
 const params = new URLSearchParams(location.search);
 const status = document.getElementById("status")!;
 const canvas = document.getElementById("demo") as HTMLCanvasElement;
+canvas.width = OUT.w;
+canvas.height = OUT.h;
+canvas.style.aspectRatio = `${OUT.w} / ${OUT.h}`;
+if (FORMAT === "square") canvas.style.width = "min(96vw, 86vh)";
 const pageCtx = canvas.getContext("2d")!;
 
 async function fetchBytes(url: string | null): Promise<ArrayBuffer | null> {
@@ -1443,7 +1531,7 @@ document.getElementById("render")!.addEventListener("click", () => {
   void render().then(({ bytes, mimeType, extension }) => {
     const a = document.createElement("a");
     a.href = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mimeType }));
-    a.download = `light-show-anywhere-demo${extension}`;
+    a.download = `light-show-anywhere-demo${FORMAT === "square" ? "-square" : ""}${extension}`;
     a.click();
   });
 });
