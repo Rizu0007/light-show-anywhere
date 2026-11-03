@@ -12,7 +12,9 @@ No app to install and no Tesla needed: guests just scan a QR code.
 ![React](https://img.shields.io/badge/React-app-61DAFB?logo=react&logoColor=black)
 ![TypeScript](https://img.shields.io/badge/TypeScript-strict-3178C6?logo=typescript&logoColor=white)
 
-<img src="docs/media/demo.gif" alt="A crowd holds up their phones; together their flashlights play the car's lights" width="720">
+<a href="docs/media/demo.mp4"><img src="docs/media/demo-poster.jpg" alt="Play the 92-second demo video: a crowd holds up their phones and together their flashlights play the car's lights" width="720"></a>
+
+▶ **[Watch the demo video](docs/media/demo.mp4)** (92 s, with narration and music)
 
 </div>
 
@@ -184,10 +186,10 @@ Hot reload, every test, the 2000-phone load test and more: **[docs/development.m
 
 ## 🎬 Demo video
 
-A 92-second narrated video shows how to use the app and how it works, with a night scene of a
-crowd lighting up together. It is made entirely in code. To build it, see
-[docs/development.md](docs/development.md#demo-video); the video is saved to
-`media/light-show-anywhere-demo.mp4`.
+**[Watch it here](docs/media/demo.mp4)**: a 92-second narrated video showing how to use the app
+and how it works, with a night scene of a crowd lighting up together. It is made entirely in code.
+To build it again, see [docs/development.md](docs/development.md#demo-video); the video is saved
+to `media/light-show-anywhere-demo.mp4` (copy it to `docs/media/demo.mp4` to update the README's).
 
 Want the same kind of video for another project? Follow
 **[docs/demo-video-playbook.md](docs/demo-video-playbook.md)**.
