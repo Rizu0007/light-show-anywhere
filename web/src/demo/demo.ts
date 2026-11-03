@@ -1341,15 +1341,21 @@ async function soundtrack(song: ArrayBuffer | null): Promise<AudioBuffer> {
 
 // ------------------------------------------------------------------------------------ export
 
-async function renderVideo(song: ArrayBuffer | null, onProgress: (f: number) => void): Promise<Uint8Array> {
+interface Rendered {
+  bytes: Uint8Array;
+  mimeType: string;
+  /** With the dot: ".mp4" or ".webm". */
+  extension: string;
+}
+
+async function renderVideo(song: ArrayBuffer | null, onProgress: (f: number) => void): Promise<Rendered> {
   const mb = await import("mediabunny");
   const codec = await mb.getFirstEncodableVideoCodec(["avc", "vp9"], { width: W, height: H });
   if (!codec) throw new Error("this browser cannot encode video");
   const mp4 = codec === "avc";
-  const output = new mb.Output({
-    format: mp4 ? new mb.Mp4OutputFormat({ fastStart: "in-memory" }) : new mb.WebMOutputFormat(),
-    target: new mb.BufferTarget(),
-  });
+  // H.264 goes in MP4; a browser without it gets VP9 in WebM.
+  const format = mp4 ? new mb.Mp4OutputFormat({ fastStart: "in-memory" }) : new mb.WebMOutputFormat();
+  const output = new mb.Output({ format, target: new mb.BufferTarget() });
   const canvas = new OffscreenCanvas(W, H);
   const ctx = canvas.getContext("2d")!;
   const video = new mb.CanvasSource(canvas, { codec, quality: mb.QUALITY_HIGH, keyFrameInterval: 2 });
@@ -1371,7 +1377,11 @@ async function renderVideo(song: ArrayBuffer | null, onProgress: (f: number) => 
   }
   await output.finalize();
   onProgress(1);
-  return new Uint8Array((output.target as InstanceType<typeof mb.BufferTarget>).buffer!);
+  return {
+    bytes: new Uint8Array((output.target as InstanceType<typeof mb.BufferTarget>).buffer!),
+    mimeType: format.mimeType,
+    extension: format.fileExtension,
+  };
 }
 
 // ------------------------------------------------------------------------------------ page
@@ -1422,18 +1432,18 @@ void ready.then(() => {
   loop();
 });
 
-async function render(): Promise<Uint8Array> {
+async function render(): Promise<Rendered> {
   const song = await ready;
-  const bytes = await renderVideo(song, (f) => (status.textContent = `Rendering… ${Math.round(f * 100)}%`));
-  status.textContent = `Done: ${(bytes.length / 1e6).toFixed(1)} MB`;
-  return bytes;
+  const video = await renderVideo(song, (f) => (status.textContent = `Rendering… ${Math.round(f * 100)}%`));
+  status.textContent = `Done: ${(video.bytes.length / 1e6).toFixed(1)} MB`;
+  return video;
 }
 
 document.getElementById("render")!.addEventListener("click", () => {
-  void render().then((bytes) => {
+  void render().then(({ bytes, mimeType, extension }) => {
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(new Blob([bytes as BlobPart], { type: "video/mp4" }));
-    a.download = "light-show-anywhere-demo.mp4";
+    a.href = URL.createObjectURL(new Blob([bytes as BlobPart], { type: mimeType }));
+    a.download = `light-show-anywhere-demo${extension}`;
     a.click();
   });
 });
@@ -1447,7 +1457,7 @@ const hooks = window as unknown as {
 hooks.__demoNarration = NARRATION;
 let rendered: Uint8Array | null = null;
 hooks.__renderDemo = async () => {
-  rendered = await render();
+  rendered = (await render()).bytes;
   return rendered.length;
 };
 hooks.__demoSlice = (from, to) => {

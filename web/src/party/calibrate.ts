@@ -16,10 +16,20 @@ export interface CalibrationRequest {
 /** A just-started audio clock runs unevenly (up to 8 ms off); after 2 s it is within a block. */
 const WARM_UP_S = 2;
 
+/** How long the audio clock gets to warm up before giving up (a suspended context never runs). */
+const WARM_UP_TIMEOUT_MS = 5000;
+
 /** `performance.now()` minus the audio clock (ms): the smallest difference seen over 0.5 s, ± one
- *  block. Over 150 ms, bursty rendering sometimes left it two blocks off. */
+ *  block. Over 150 ms, bursty rendering sometimes left it two blocks off. Throws if the audio clock
+ *  does not run (a context the browser keeps suspended). */
 async function audioOffset(ctx: AudioContext): Promise<number> {
-  while (ctx.currentTime < WARM_UP_S) await new Promise((resolve) => setTimeout(resolve, 10));
+  // Outside a tap some browsers leave resume() pending; the warm-up check below then gives up.
+  await Promise.race([ctx.resume(), new Promise((resolve) => setTimeout(resolve, WARM_UP_TIMEOUT_MS))]);
+  const giveUp = performance.now() + WARM_UP_TIMEOUT_MS;
+  while (ctx.currentTime < WARM_UP_S) {
+    if (performance.now() > giveUp) throw new Error("the audio clock is not running");
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
   let best = Infinity;
   const until = performance.now() + 500;
   while (performance.now() < until) {
@@ -37,7 +47,6 @@ export async function playTones(
   request: CalibrationRequest,
   output: AudioNode = ctx.destination,
 ): Promise<void> {
-  await ctx.resume();
   const offset = await audioOffset(ctx);
   const tone = chirp(ctx.sampleRate);
   const buffer = ctx.createBuffer(1, tone.length, ctx.sampleRate);
@@ -76,7 +85,6 @@ export async function listenForTones(
 ): Promise<number | null> {
   let stream: MediaStream | null = null;
   try {
-    await ctx.resume();
     stream = await navigator.mediaDevices.getUserMedia({
       // Raw sound: echo cancellation and noise suppression would remove the tones.
       audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },

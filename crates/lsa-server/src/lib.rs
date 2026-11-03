@@ -36,6 +36,14 @@ pub const RESUME_GRACE: Duration = Duration::from_secs(120);
 /// Hosts get at most one roster per this interval, with every change since the last one.
 pub const ROSTER_INTERVAL: Duration = Duration::from_millis(200);
 
+/// A connection whose browser takes longer than this to accept one message is dropped (it
+/// reconnects and resumes). Generous: a 4-hour light track is about 1 MB.
+pub const SEND_TIMEOUT: Duration = Duration::from_secs(15);
+
+/// A connection with more messages than this waiting to be sent is dropped, so a slow browser
+/// cannot make the server hold an ever-growing backlog.
+pub const MAX_QUEUED: usize = 4096;
+
 /// Shared server state.
 #[derive(Debug)]
 pub struct AppState {
@@ -193,26 +201,19 @@ async fn connection(socket: WebSocket, state: Arc<AppState>) {
     let (mut sink, mut stream) = socket.split();
     let (tx, mut rx) = mpsc::unbounded_channel::<Outgoing>();
 
-    let writer = tokio::spawn(async move {
-        while let Some(outgoing) = rx.recv().await {
-            let message = match outgoing {
-                Outgoing::Text(message) => match serde_json::to_string(&message) {
-                    Ok(json) => Message::Text(json.into()),
-                    Err(err) => {
-                        tracing::error!("serialising {message:?}: {err}");
-                        continue;
-                    }
-                },
-                Outgoing::Binary(bytes) => Message::Binary(bytes),
-            };
-            if sink.send(message).await.is_err() {
-                break;
-            }
-        }
-    });
+    // Ends when the socket fails or cannot keep up (see `write`); the connection then closes, and
+    // the browser reconnects and resumes its place.
+    let mut writer = tokio::spawn(async move { write(&mut sink, &mut rx).await });
 
     let mut pending: Option<PendingLoad> = None;
-    while let Some(Ok(message)) = stream.next().await {
+    loop {
+        let message = tokio::select! {
+            message = stream.next() => message,
+            _ = &mut writer => break,
+        };
+        let Some(Ok(message)) = message else {
+            break;
+        };
         match message {
             Message::Text(text) => match serde_json::from_str::<ClientMsg>(&text) {
                 // The most frequent message, and it never changes a room.
@@ -278,6 +279,52 @@ async fn connection(socket: WebSocket, state: Arc<AppState>) {
         tokio::time::sleep(state.resume_grace).await;
         state.rooms().expire(id, epoch);
         state.schedule_rosters();
+    }
+}
+
+/// Sends queued messages to the socket until it fails or falls too far behind: a send that takes
+/// longer than [`SEND_TIMEOUT`], or more than [`MAX_QUEUED`] messages waiting. Stopping drops the
+/// queue, so a stalled browser cannot make the server hold an ever-growing backlog.
+async fn write(
+    sink: &mut futures_util::stream::SplitSink<WebSocket, Message>,
+    rx: &mut mpsc::UnboundedReceiver<Outgoing>,
+) {
+    let mut batch = Vec::new();
+    while rx.recv_many(&mut batch, 256).await > 0 {
+        if rx.len() > MAX_QUEUED {
+            tracing::debug!(
+                "dropping a connection that fell {} messages behind",
+                rx.len()
+            );
+            return;
+        }
+        // Only the newest roster matters; older ones still waiting are skipped.
+        let newest_roster = batch
+            .iter()
+            .rposition(|o| matches!(o, Outgoing::Text(ServerMsg::Roster { .. })));
+        for (index, outgoing) in batch.drain(..).enumerate() {
+            let message = match outgoing {
+                Outgoing::Text(ServerMsg::Roster { .. }) if Some(index) != newest_roster => {
+                    continue;
+                }
+                Outgoing::Text(message) => match serde_json::to_string(&message) {
+                    Ok(json) => Message::Text(json.into()),
+                    Err(err) => {
+                        tracing::error!("serialising {message:?}: {err}");
+                        continue;
+                    }
+                },
+                Outgoing::Binary(bytes) => Message::Binary(bytes),
+            };
+            match tokio::time::timeout(SEND_TIMEOUT, sink.send(message)).await {
+                Ok(Ok(())) => {}
+                Ok(Err(_)) => return,
+                Err(_) => {
+                    tracing::debug!("dropping a connection that stopped reading");
+                    return;
+                }
+            }
+        }
     }
 }
 

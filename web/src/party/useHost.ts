@@ -42,7 +42,7 @@ export interface HostParty {
   playback: PartyPlayback;
   /** Show position right now on the shared clock (what every phone shows). */
   positionNow: () => number;
-  /** Shared clock in milliseconds, or `null` before sync. */
+  /** Shared clock in milliseconds, or `null` until synced. */
   serverNow: () => number | null;
   /** Starts a party (from a click, which lets it prepare the speaker measurement). */
   start: (fromClick?: boolean) => void;
@@ -125,7 +125,8 @@ export function useHost(): HostParty {
 
   const sendLayout = useCallback(() => {
     const json = JSON.stringify(layout.current);
-    if (!session.current || session.current.layout === json) return;
+    // A new room has no layout, which is the same as an empty one.
+    if (!session.current || (session.current.layout ?? "[]") === json) return;
     if (conn.current?.send({ t: "layout", spots: layout.current })) {
       session.current.layout = json;
       remember();
@@ -194,12 +195,14 @@ export function useHost(): HostParty {
             setError(null);
             upload();
             // After the show: the server checks the layout's cars against it.
-            if (layout.current.length > 0) sendLayout();
+            sendLayout();
             break;
           case "resumed":
             setRoom(msg.room);
             setError(null);
+            // Whatever could not be sent while offline.
             if (needsUpload.current) upload();
+            sendLayout();
             break;
           case "expired":
             // Offline for longer than the server keeps a room.
@@ -219,7 +222,9 @@ export function useHost(): HostParty {
             setCalibration({ at: msg.at, heard: [] });
             if (audioContext.current && clock.current) {
               const sync = clock.current;
-              void playTones(audioContext.current, () => sync.serverNow(), msg);
+              void playTones(audioContext.current, () => sync.serverNow(), msg).catch(() =>
+                setError("Could not play the tones: this computer's audio did not start. Try again."),
+              );
             }
             break;
           case "heard":
@@ -279,13 +284,14 @@ export function useHost(): HostParty {
 
   const positionNow = useCallback(() => {
     const { playing, t0, positionMs } = playbackRef.current;
-    if (playing && t0 !== null && clock.current) {
+    if (playing && t0 !== null && clock.current?.ready) {
       return Math.max(positionMs, clock.current.serverNow() - t0);
     }
     return positionMs;
   }, []);
 
-  const serverNow = useCallback(() => clock.current?.serverNow() ?? null, []);
+  // Before the clock is synced its time is this computer's, not the server's.
+  const serverNow = useCallback(() => (clock.current?.ready ? clock.current.serverNow() : null), []);
 
   return {
     active,

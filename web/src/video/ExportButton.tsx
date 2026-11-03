@@ -6,7 +6,11 @@ import { exportVideo, inspectVideo } from "./export";
 import { HEIGHT, WIDTH, carPlacement, drawFrame } from "./render";
 
 interface Props {
+  /** The previewed shows, one per car. */
   fleet: Show[];
+  /** Their files: the export makes its own shows from them, so loading another show or vehicle
+   *  meanwhile does not change it. */
+  files: Uint8Array<ArrayBuffer>[];
   /** Previewed car (0-based). */
   car: number;
   bars: boolean;
@@ -29,7 +33,7 @@ const devHooks = window as unknown as {
 if (import.meta.env.DEV) devHooks.__lsaInspectVideo = inspectVideo;
 
 /** Exports the preview and the song as a video file. */
-export function ExportButton({ fleet, car, bars, vehicle, layout, title, songUrl }: Props) {
+export function ExportButton({ fleet, files, car, bars, vehicle, layout, title, songUrl }: Props) {
   const [progress, setProgress] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [crowd, setCrowd] = useState(false);
@@ -60,7 +64,7 @@ export function ExportButton({ fleet, car, bars, vehicle, layout, title, songUrl
       // Development: ?exportSeconds=5 exports only the start (scripts/video-e2e.mjs).
       const limit = import.meta.env.DEV ? Number(new URLSearchParams(location.search).get("exportSeconds")) : 0;
       const { blob, extension } = await exportVideo({
-        fleet,
+        files,
         car,
         bars,
         vehicle,

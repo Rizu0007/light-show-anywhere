@@ -13,7 +13,7 @@
 
 use std::collections::HashMap;
 use std::io;
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
@@ -102,14 +102,19 @@ impl Config {
                 return Err(format!("{name}: leds must be 1 to {MAX_LEDS}"));
             }
             for run in &device.map {
-                if run.count == 0 || run.start + run.count > device.leds {
+                if run.count == 0
+                    || run
+                        .start
+                        .checked_add(run.count)
+                        .is_none_or(|end| end > device.leds)
+                {
                     return Err(format!(
                         "{name}: LEDs {}+{} do not fit",
                         run.start, run.count
                     ));
                 }
                 let last = if run.per_led {
-                    usize::from(run.channel) + run.count - 1
+                    usize::from(run.channel).saturating_add(run.count - 1)
                 } else {
                     usize::from(run.channel)
                 };
@@ -189,7 +194,14 @@ fn render(
     frame
 }
 
+/// `host`, `host:port`, an IP address (IPv6 too) or `[ipv6]:port`; port 4048 when not given.
 async fn resolve(address: &str) -> io::Result<SocketAddr> {
+    if let Ok(addr) = address.parse::<SocketAddr>() {
+        return Ok(addr);
+    }
+    if let Ok(ip) = address.parse::<IpAddr>() {
+        return Ok(SocketAddr::new(ip, DDP_PORT));
+    }
     let with_port = if address.contains(':') {
         address.to_owned()
     } else {

@@ -11,7 +11,7 @@ export function useSyncedAudio(
   speakerDelayMs: number,
   audioUrl: string | null,
 ): void {
-  const { active, playback, serverNow } = party;
+  const { active, playback, serverNow, synced } = party;
 
   useEffect(() => {
     const el = audio.current;
@@ -22,6 +22,10 @@ export function useSyncedAudio(
       el.currentTime = positionMs / 1000;
       return;
     }
+
+    // Not synced yet: start once it is (`synced` re-runs this).
+    const server = serverNow();
+    if (server === null) return;
 
     let startTimer = 0;
     let checkTimer = 0;
@@ -41,9 +45,8 @@ export function useSyncedAudio(
       checkTimer = window.setInterval(check, CHECK_EVERY_MS);
     };
 
-    const server = serverNow();
     // Server time at which the song should be at `positionMs`.
-    const wait = server === null ? 0 : t0 + positionMs - speakerDelayMs - server;
+    const wait = t0 + positionMs - speakerDelayMs - server;
     if (wait > 0) startTimer = window.setTimeout(begin, wait);
     else begin();
 
@@ -51,5 +54,5 @@ export function useSyncedAudio(
       clearTimeout(startTimer);
       clearInterval(checkTimer);
     };
-  }, [audio, active, playback, serverNow, speakerDelayMs, audioUrl]);
+  }, [audio, active, playback, serverNow, synced, speakerDelayMs, audioUrl]);
 }

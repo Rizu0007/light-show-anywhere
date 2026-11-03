@@ -109,7 +109,12 @@ export function startClockSync(clock: ClockSync): () => void {
   };
   loop();
   const onVisible = () => {
-    if (document.visibilityState === "visible") clock.reset();
+    if (document.visibilityState !== "visible" || stopped) return;
+    clock.reset();
+    // Ping now rather than after the slow interval that was waiting, so the clock (and the
+    // phone's light) is back within a second or two.
+    clearTimeout(timer);
+    loop();
   };
   document.addEventListener("visibilitychange", onVisible);
   return () => {

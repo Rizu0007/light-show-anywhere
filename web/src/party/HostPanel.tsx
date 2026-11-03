@@ -163,10 +163,11 @@ export function HostPanel({ party, hasShow, cars, bars, layout, nameOf, speakerD
         </h3>
         {party.roster.length === 0 && <p className="hint">Waiting for phones to join…</p>}
         <ul>
-          {party.roster.map((member, i) => (
+          {party.roster.map((member) => (
             <li key={member.id}>
               <span>
-                {member.name ?? `Phone ${i + 1}`}
+                {/* By id, not position: names stay put when a phone leaves. */}
+                {member.name ?? `Phone ${member.id}`}
                 {!member.online && <em className="offline"> · offline</em>}
                 {member.online && problems(member.health).length > 0 && (
                   <em className="trouble"> · {problems(member.health).join(", ")}</em>
