@@ -3,7 +3,7 @@
 How to make a narrated, animated demo video for a software project, entirely from code: real
 screenshots of the app, animated explainer scenes, an offline human-sounding voice, music, and
 subtitles, rendered to MP4. Written for Claude Code to follow in any project; it was first used for
-Light Show Anywhere (a 92 s video, rendered in about 2 minutes).
+Light Show Anywhere (a 68 s video in 16:9 and square, rendered in about 2 minutes).
 
 **Why code instead of a video editor:** every frame is exact and reproducible, the video is made
 from the app's *real* rendering code and data (it cannot drift from what the product does), and

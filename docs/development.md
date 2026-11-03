@@ -77,7 +77,7 @@ One laptop serves 2000 phones: all get their light within 0.7 s of joining toget
 
 ## Demo video
 
-The narrated demo video (`media/light-show-anywhere-demo.mp4`, 92 s, plus a WebM copy) is drawn
+The narrated demo video (`media/light-show-anywhere-demo.mp4`, 68 s, plus a WebM copy and a square 1080 × 1080 copy for social feeds, `…-demo-square.mp4`) is drawn
 by code in [`web/src/demo/demo.ts`](../web/src/demo/demo.ts) and rendered frame by frame in
 headless Chrome, so every run gives the same video.
 
