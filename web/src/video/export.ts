@@ -1,15 +1,15 @@
 /** Exports the preview and the song as a video file, frame by frame (faster than playing it and
  *  frame-exact), with Mediabunny (MPL-2.0), loaded only when exporting. */
 
-import type { Show, Vehicle } from "../engine";
+import { Show, type Vehicle } from "../engine";
 import type { Spot } from "../party/layouts";
 import { HEIGHT, WIDTH, drawFrame } from "./render";
 
 export const FPS = 30;
 
 export interface ExportOptions {
-  /** One Show per car, car 1 first. */
-  fleet: Show[];
+  /** One `.fseq` file per car, car 1 first. */
+  files: Uint8Array<ArrayBuffer>[];
   /** Car drawn when not filming the crowd (0-based). */
   car: number;
   bars: boolean;
@@ -42,6 +42,17 @@ async function songBuffer(song: Blob, durationMs: number): Promise<AudioBuffer> 
 }
 
 export async function exportVideo(options: ExportOptions): Promise<ExportedVideo> {
+  // Its own shows, freed when done: the page's may be replaced or re-rendered meanwhile.
+  const fleet: Show[] = [];
+  try {
+    for (const file of options.files) fleet.push(new Show(file, options.vehicle));
+    return await encode(options, fleet);
+  } finally {
+    fleet.forEach((s) => s.free());
+  }
+}
+
+async function encode(options: ExportOptions, fleet: Show[]): Promise<ExportedVideo> {
   const mb = await import("mediabunny");
   const videoCodec = await mb.getFirstEncodableVideoCodec(["avc", "vp9", "vp8"], { width: WIDTH, height: HEIGHT });
   if (!videoCodec) throw new Error("this browser cannot encode video");
@@ -57,7 +68,7 @@ export async function exportVideo(options: ExportOptions): Promise<ExportedVideo
   output.addVideoTrack(video, { frameRate: FPS });
 
   const durationMs = Math.min(
-    Math.max(...options.fleet.map((s) => s.durationMs)),
+    Math.max(...fleet.map((s) => s.durationMs)),
     options.limitMs ?? Infinity,
   );
   let audio: { source: InstanceType<typeof mb.AudioBufferSource>; buffer: AudioBuffer } | null = null;
@@ -82,7 +93,7 @@ export async function exportVideo(options: ExportOptions): Promise<ExportedVideo
       if (options.signal.aborted) throw new DOMException("export cancelled", "AbortError");
       const timeMs = (i * 1000) / FPS;
       drawFrame(ctx, {
-        levelsByCar: options.fleet.map((s) => s.levelsAt(timeMs)),
+        levelsByCar: fleet.map((s) => s.levelsAt(timeMs)),
         car: options.car,
         bars: options.bars,
         vehicle: options.vehicle,

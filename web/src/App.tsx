@@ -200,10 +200,8 @@ export function App() {
         const bytes = await Promise.all(shows.map(async (f) => new Uint8Array(await f.arrayBuffer())));
         for (const b of bytes) next.push(new Show(b, forVehicle));
         showBytes.current = bytes;
-        setFleet((previous) => {
-          previous.forEach((s) => s.free());
-          return next;
-        });
+        // The shows replaced are freed once nothing draws them any more (see below).
+        setFleet(next);
         setShow(next[0]);
         setShowName(next.length > 1 ? pathOf(shows[0]).split("/")[0] || `${next.length}-car show` : shows[0].name);
         setIssues(next[0].teslaIssues());
@@ -299,6 +297,14 @@ export function App() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // Frees shows no longer loaded, after the render that stopped drawing them. Not an effect
+  // cleanup: development mode runs those while the shows are still in use.
+  const loadedShows = useRef<Show[]>([]);
+  useEffect(() => {
+    for (const s of loadedShows.current) if (!fleet.includes(s)) s.free();
+    loadedShows.current = fleet;
+  }, [fleet]);
 
   const levelsAt = useMemo(() => (show ? (ms: number) => show.levelsAt(ms) : null), [show]);
 
@@ -453,6 +459,7 @@ export function App() {
           )}
           <ExportButton
             fleet={fleet}
+            files={showBytes.current}
             car={Math.max(0, fleet.indexOf(show))}
             bars={showBars}
             vehicle={vehicle}
