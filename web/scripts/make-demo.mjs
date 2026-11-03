@@ -5,7 +5,7 @@
 //
 // Voice: Kokoro, an open neural voice that runs offline (../.demo-tools: a Python venv with
 // kokoro-onnx and soundfile, and models/kokoro-v1.0.onnx + voices-v1.0.bin); without it, macOS `say`.
-// VOICE picks the voice (Kokoro: af_heart, af_bella, am_michael, bf_emma…; say: Samantha…);
+// VOICE picks the voice (Kokoro: am_puck (default), af_heart, af_bella, am_michael, bf_emma…; say: Samantha…);
 // NO_VOICE=1 leaves the narration out. The music dips while the voice speaks.
 //
 // Needs lsa-server, `npm run dev`, the Tesla example show (../scripts/fetch-tesla-example.sh) and
@@ -69,7 +69,7 @@ function duration(file) {
 function speak(lines, dir) {
   const python = `${tools}/venv/bin/python`;
   if (existsSync(python) && existsSync(`${tools}/models/kokoro-v1.0.onnx`)) {
-    const voice = process.env.VOICE ?? "af_heart";
+    const voice = process.env.VOICE ?? "am_puck";
     const speeds = lines.map(() => 1);
     const files = lines.map((_, i) => join(dir, `${i}.wav`));
     let todo = lines.map((_, i) => i);

@@ -232,14 +232,14 @@ import soundfile as sf
 from kokoro_onnx import Kokoro
 models = sys.argv[1]
 kokoro = Kokoro(os.path.join(models, "kokoro-v1.0.onnx"), os.path.join(models, "voices-v1.0.bin"))
-voice = os.environ.get("VOICE", "af_heart")
+voice = os.environ.get("VOICE", "am_puck")
 for line in json.load(sys.stdin):
     samples, rate = kokoro.create(line["text"], voice=voice, speed=line["speed"], lang="en-us")
     sf.write(line["out"], samples, rate)
     print(f"{len(samples) / rate:.2f}", flush=True)
 ```
 
-- Voices: `af_heart` (warm US female, best), `af_bella`, `am_michael` (US male), `bf_emma` (UK female).
+- Voices: `am_puck` (US male, used for this project), `af_heart` (warm US female), `af_bella`, `am_michael` (US male), `bf_emma` (UK female).
 - **Fit loop:** speak all lines at speed 1.0, measure, re-speak only lines longer than their `room`
   at +0.05 speed (cap ~1.3). If a line needs > 1.1, **shorten the text** instead; fast speech sounds robotic.
 - Run Python with `-I` (isolated) from the venv.
